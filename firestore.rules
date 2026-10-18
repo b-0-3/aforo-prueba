@@ -1,0 +1,178 @@
+rules_version = '2';
+
+// ============================================================
+//  AFORO · REGLAS DE SEGURIDAD · VERSIÓN DE PRUEBA
+//  Cópialas enteras en Firebase → Firestore Database → Reglas → Publicar
+//
+//  ⚠️ En esta versión no hay servidor: las compras se hacen desde el
+//  navegador del cliente y no se cobra nada. Por eso estas reglas dejan
+//  que cualquiera cree pedidos y entradas de prueba.
+//  NUNCA uses estas reglas para vender con dinero real: para eso están
+//  las reglas de producción del repo privado (b-0-3/aforo).
+//
+//  Roles dentro de cada local o promotora:
+//   owner  → el dueño (quien creó la cuenta). Puede con todo.
+//   admin  → encargado. Igual que el dueño salvo cambiar al dueño.
+//   puerta → solo valida entradas y deja pasar a la lista.
+//   barra  → solo cobra en la barra y ve los pedidos de mesa.
+//   rrpp   → ve su panel y apunta gente en su propia lista.
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signed() { return request.auth != null; }
+    function memberPath(org) { return /databases/$(database)/documents/orgs/$(org)/members/$(request.auth.uid); }
+    function isMember(org) { return signed() && exists(memberPath(org)); }
+    function myRole(org) { return get(memberPath(org)).data.role; }
+    function hasRole(org, roles) { return isMember(org) && myRole(org) in roles; }
+    function isAdmin(org) { return hasRole(org, ['owner', 'admin']); }
+    function myRrpp(org) { return get(memberPath(org)).data.rrppId; }
+    function onlyChanges(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function invite(code) { return get(/databases/$(database)/documents/invites/$(code)).data; }
+    // El pedido de prueba se crea en la misma operación que lo que lo acompaña.
+    // Una sola consulta por documento (Firebase permite 20 por compra).
+    function orderFor(id, org) {
+      let o = getAfter(/databases/$(database)/documents/orders/$(id)).data;
+      return o.orgId == org && o.status == 'paid';
+    }
+    function ticketOrderOk(org) {
+      let o = getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data;
+      return o.orgId == org && o.eventId == request.resource.data.eventId;
+    }
+
+    // Puntero de cada usuario a su local/promotora
+    match /users/{uid} {
+      allow read, write: if signed() && request.auth.uid == uid;
+    }
+
+    // Locales y promotoras
+    match /orgs/{org} {
+      allow read: if true; // nombre, plano de mesas, carta y códigos de RRPP son públicos
+      allow create: if signed() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAdmin(org) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid']);
+      allow delete: if false;
+
+      // Equipo
+      match /members/{uid} {
+        allow read: if isMember(org) || (signed() && request.auth.uid == uid);
+        allow create: if signed() && request.auth.uid == uid && (
+          (request.resource.data.role == 'owner'
+            && getAfter(/databases/$(database)/documents/orgs/$(org)).data.ownerUid == uid)
+          || (request.resource.data.inviteCode is string
+            && invite(request.resource.data.inviteCode).orgId == org
+            && invite(request.resource.data.inviteCode).used == false
+            && invite(request.resource.data.inviteCode).role == request.resource.data.role
+            && invite(request.resource.data.inviteCode).rrppId == request.resource.data.rrppId
+            && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.usedBy == uid)
+        );
+        allow update: if isAdmin(org) && resource.data.role != 'owner' && request.resource.data.role != 'owner';
+        allow delete: if resource.data.role != 'owner' && (isAdmin(org) || (signed() && request.auth.uid == uid));
+      }
+
+      // RRPP: el equipo los ve; una compra de prueba solo puede sumarles ventas
+      match /rrpp/{id} {
+        allow read: if isMember(org);
+        allow create, delete: if isAdmin(org);
+        allow update: if isAdmin(org)
+          || (onlyChanges(['sold', 'soldTotal', 'earned', 'tablesCount'])
+              && request.resource.data.get('soldTotal', 0) >= resource.data.get('soldTotal', 0)
+              && request.resource.data.get('earned', 0) >= resource.data.get('earned', 0));
+      }
+
+      // Listas de invitados
+      match /guests/{id} {
+        allow read: if isMember(org);
+        allow create: if isAdmin(org)
+          || (hasRole(org, ['rrpp']) && request.resource.data.rrppId == myRrpp(org) && request.resource.data.inAt == null);
+        allow update: if isAdmin(org) || (hasRole(org, ['puerta']) && onlyChanges(['inAt', 'inBy']));
+        allow delete: if isAdmin(org)
+          || (hasRole(org, ['rrpp']) && resource.data.rrppId == myRrpp(org) && resource.data.inAt == null);
+      }
+
+      // Reservas de mesas VIP
+      match /reservations/{id} {
+        allow read: if isMember(org);
+        allow create: if (isAdmin(org) && request.resource.data.source == 'manual')
+          || (request.resource.data.source == 'online' && request.resource.data.arrivedAt == null
+              && orderFor(id, org));
+        allow update: if isAdmin(org) || (hasRole(org, ['puerta']) && onlyChanges(['arrivedAt']));
+        allow delete: if isAdmin(org);
+      }
+
+      // Entradas: se crean con su pedido de prueba. En la puerta solo se marcan como usadas.
+      match /tickets/{code} {
+        allow read: if hasRole(org, ['owner', 'admin', 'puerta']);
+        allow create: if request.resource.data.usedAt == null
+          && request.resource.data.orderId is string
+          && ticketOrderOk(org);
+        allow delete: if false;
+        allow update: if hasRole(org, ['owner', 'admin', 'puerta'])
+          && resource.data.usedAt == null
+          && onlyChanges(['usedAt', 'usedBy'])
+          && request.resource.data.usedBy == request.auth.uid;
+      }
+
+      // Pedidos pagados desde la mesa
+      match /tableOrders/{id} {
+        allow get: if true;
+        allow list: if hasRole(org, ['owner', 'admin', 'barra']);
+        allow create: if request.resource.data.status == 'nuevo' && orderFor(id, org);
+        allow delete: if false;
+        allow update: if hasRole(org, ['owner', 'admin', 'barra'])
+          && onlyChanges(['status'])
+          && request.resource.data.status in ['nuevo', 'camino', 'servido'];
+      }
+
+      // Cobros de barra (TPV del camarero o pedido desde la mesa)
+      match /barSales/{id} {
+        allow read: if hasRole(org, ['owner', 'admin', 'barra']);
+        allow create: if (hasRole(org, ['owner', 'admin', 'barra']) && request.resource.data.staffUid == request.auth.uid)
+          || (request.resource.data.source == 'mesa' && request.resource.data.staffUid == null && orderFor(id, org));
+        allow update, delete: if false;
+      }
+
+      // Actividad en directo del panel
+      match /activity/{id} {
+        allow read: if isAdmin(org);
+        allow create: if request.resource.data.text is string && request.resource.data.text.size() < 300;
+        allow update, delete: if false;
+      }
+    }
+
+    // Eventos: el equipo los gestiona; una compra de prueba solo puede sumar ventas o reservar mesa
+    match /events/{id} {
+      allow read: if resource.data.published == true || isMember(resource.data.orgId);
+      allow create: if isAdmin(request.resource.data.orgId);
+      allow update: if (isAdmin(resource.data.orgId) && request.resource.data.orgId == resource.data.orgId)
+        || (hasRole(resource.data.orgId, ['puerta'])
+            && onlyChanges(['inside'])
+            && request.resource.data.inside == resource.data.get('inside', 0) + 1)
+        || (resource.data.published == true
+            && onlyChanges(['tiers', 'soldTotal', 'revenue', 'daily', 'taken'])
+            && request.resource.data.get('soldTotal', 0) >= resource.data.get('soldTotal', 0)
+            && request.resource.data.get('taken', []).size() >= resource.data.get('taken', []).size());
+      allow delete: if isAdmin(resource.data.orgId) && resource.data.get('soldTotal', 0) == 0;
+    }
+
+    // Pedidos de clientes. El id es secreto y largo: quien lo tiene ve su pedido.
+    match /orders/{id} {
+      allow get: if true;
+      allow list, update, delete: if false;
+      allow create: if request.resource.data.status == 'paid' && request.resource.data.simulated == true
+        && request.resource.data.kind in ['tickets', 'table', 'bar'];
+    }
+
+    // Invitaciones para unirse al equipo
+    match /invites/{code} {
+      allow get: if signed();
+      allow list: if isAdmin(resource.data.orgId);
+      allow create: if isAdmin(request.resource.data.orgId) && request.resource.data.used == false;
+      allow update: if signed()
+        && resource.data.used == false
+        && request.resource.data.used == true
+        && request.resource.data.usedBy == request.auth.uid
+        && onlyChanges(['used', 'usedBy']);
+      allow delete: if isAdmin(resource.data.orgId);
+    }
+  }
+}

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aforo · Entradas, puerta, RRPP y barra para discotecas</title>
+<meta name="description" content="Vende entradas online, controla la puerta con el móvil, paga a tus RRPP y cobra la barra desde un solo sitio. Para discotecas, salas y promotoras.">
+<meta name="theme-color" content="#0D0E13">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/aforo.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./"><svg viewBox="0 0 34 22" aria-hidden="true"><rect x="2.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><rect x="29.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><circle cx="3.5" cy="3.6" r="2.6" fill="var(--brass)"/><circle cx="30.5" cy="3.6" r="2.6" fill="var(--brass)"/><rect x="0" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><rect x="27" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><path d="M4.8 6.4 Q17 19 29.2 6.4" fill="none" stroke="var(--rope)" stroke-width="2.6" stroke-linecap="round"/></svg><span>aforo</span></a>
+    <nav class="top-nav" aria-label="Principal">
+      <a href="eventos.html">Eventos</a>
+      <a href="pedido.html">Mis entradas</a>
+      <a href="app/">Entrar</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap main">
+  <div class="page">
+    <section class="hero">
+      <div class="page-head">
+        <p class="eyebrow">Para discotecas, salas y promotoras</p>
+        <h1 class="hero-t">Llena la sala. <em>Cobra</em> la barra. Sin Excel.</h1>
+        <p class="lead">Vende entradas online, controla la puerta con el móvil, paga a tus RRPP y cobra copas y mesas VIP desde un solo sitio. El dinero va directo a tu cuenta.</p>
+        <div class="row" style="margin-top:8px">
+          <a class="btn btn-primary" href="app/entrar.html#registro">Crear cuenta gratis</a>
+          <a class="btn" href="eventos.html">Ver eventos</a>
+        </div>
+      </div>
+      <div class="flyer flyer-big" style="--h:346" aria-hidden="true">
+        <div class="fl-top"><span>Sábado · 23:30</span><span>Tu sala</span></div>
+        <div class="fl-name">Lleno total</div>
+        <div class="fl-bot"><span>Entradas · Puerta · RRPP · Mesas · Barra</span></div>
+      </div>
+    </section>
+
+    <section class="page-head">
+      <p class="eyebrow">Todo en una app</p>
+      <h2 class="h1">Lo que necesitas cada noche</h2>
+    </section>
+    <div class="feat">
+      <div class="card"><p class="eyebrow">Vende</p><h3 class="h2">Entradas online</h3><p class="small">Por fases (1ª, 2ª, con copa…). El cliente paga en dos toques y recibe su entrada con QR al momento.</p></div>
+      <div class="card"><p class="eyebrow">Controla</p><h3 class="h2">Puerta con el móvil</h3><p class="small">El portero escanea con la cámara del móvil. Verde, pasa. Rojo, falsa o repetida. Sin aparatos.</p></div>
+      <div class="card"><p class="eyebrow">Paga</p><h3 class="h2">RRPP y listas</h3><p class="small">Cada RRPP vende con su enlace. Sus ventas y su comisión se apuntan solas. Listas de invitados en el móvil.</p></div>
+      <div class="card"><p class="eyebrow">Cobra</p><h3 class="h2">Mesas VIP y barra</h3><p class="small">Reservas con señal sobre el plano de tu sala, TPV para la barra y pedidos pagados desde la mesa con un QR.</p></div>
+    </div>
+
+    <section class="page-head">
+      <p class="eyebrow">Cómo empezar</p>
+      <h2 class="h1">En tres pasos</h2>
+    </section>
+    <ol class="steps" style="margin:0;padding:0">
+      <li><b>Crea tu cuenta</b><span class="small">Como local o como promotora. Gratis y en un minuto.</span></li>
+      <li><b>Conecta tus cobros</b><span class="small">Con Stripe. El dinero de cada venta llega a tu cuenta bancaria.</span></li>
+      <li><b>Publica tu evento</b><span class="small">Comparte el enlace y pásaselo a tus RRPP. Ya estás vendiendo.</span></li>
+    </ol>
+
+    <section class="card" style="gap:10px">
+      <p class="eyebrow eyebrow-brass">Precio</p>
+      <h2 class="h1">Sin cuota mensual</h2>
+      <p class="lead">Tú cobras el 100 % del precio de tus entradas. El comprador paga <b id="fee">0,75 €</b> de gastos de gestión por entrada. La puerta, la barra, los RRPP y las mesas no cuestan nada extra.</p>
+      <div class="row"><a class="btn btn-primary" href="app/entrar.html#registro">Empezar ahora</a></div>
+    </section>
+  </div>
+</main>
+
+<footer class="wrap foot"><div class="foot-in"><span>Aforo · hecho en Madrid · versión de prueba, no se cobra nada</span><span><a href="eventos.html">Eventos</a> · <a href="pedido.html">Mis entradas</a> · <a href="app/">Acceso locales</a></span></div></footer>
+
+<script type="module">
+  import { FEE_PER_TICKET } from "./js/config.js";
+  import { eur } from "./js/ui.js";
+  document.getElementById("fee").textContent = eur(FEE_PER_TICKET);
+</script>
+</body>
+</html>

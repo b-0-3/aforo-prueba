@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Evento · Aforo</title>
+<meta name="theme-color" content="#0D0E13">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/aforo.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./"><svg viewBox="0 0 34 22" aria-hidden="true"><rect x="2.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><rect x="29.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><circle cx="3.5" cy="3.6" r="2.6" fill="var(--brass)"/><circle cx="30.5" cy="3.6" r="2.6" fill="var(--brass)"/><rect x="0" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><rect x="27" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><path d="M4.8 6.4 Q17 19 29.2 6.4" fill="none" stroke="var(--rope)" stroke-width="2.6" stroke-linecap="round"/></svg><span>aforo</span></a>
+    <nav class="top-nav" aria-label="Principal">
+      <a href="eventos.html">Eventos</a>
+      <a href="pedido.html">Mis entradas</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap main">
+  <section class="page" id="view">
+    <div class="loading"><span class="spin spin-sm"></span>Cargando el evento…</div>
+  </section>
+</main>
+
+<footer class="wrap foot"><div class="foot-in"><span>Aforo · versión de prueba, no se cobra nada</span><span><a href="pedido.html">Mis entradas</a></span></div></footer>
+
+<script type="module">
+  import { configured, db, doc, getDoc, onSnapshot, notConfiguredHtml } from "./js/firebase.js";
+  import { FEE_PER_TICKET, DEPOSIT_PCT, PAGOS } from "./js/config.js";
+  import { crearPago } from "./js/pagos.js";
+  import { $, esc, eur, ucf, fmtLong, fmtTime, flyer, stepper, mapHtml, legend, delegate, openSheet, setSheet, closeSheet, sheetBody, toast, paying, shareOrCopy, toDate, url } from "./js/ui.js";
+  import { params, rememberRrpp, rrppFor } from "./js/public.js";
+
+  const view = $("#view");
+  const id = params.get("id");
+  let e = null, org = null, q = {}, rrppCode = null, vip = { table: null, name: "", email: "", phone: "", people: "" }, busy = false;
+
+  if (!configured) view.innerHTML = notConfiguredHtml();
+  else if (!id) view.innerHTML = '<div class="notice"><b>Falta el evento.</b><p class="small"><a href="eventos.html">Ver todos los eventos</a></p></div>';
+  else start();
+
+  function notFound() {
+    view.innerHTML = '<a class="back" href="eventos.html">← Todos los eventos</a><div class="card empty"><p><b>Este evento no existe o ya no está a la venta.</b></p><a class="btn" href="eventos.html">Ver otros eventos</a></div>';
+  }
+
+  function start() {
+    let first = true;
+    onSnapshot(doc(db, "events", id), async snap => {
+      if (!snap.exists()) { notFound(); return; }
+      e = { id: snap.id, ...snap.data() };
+      if (first) {
+        first = false;
+        if (params.get("rrpp")) rememberRrpp(e.orgId, params.get("rrpp"));
+        rrppCode = rrppFor(e.orgId);
+        try { const o = await getDoc(doc(db, "orgs", e.orgId)); org = o.exists() ? o.data() : {}; } catch (err) { org = {}; }
+        document.title = e.name + " · Aforo";
+        renderAll();
+      } else {
+        // Llega una venta o reserva nueva: refrescamos disponibilidad sin perder lo escrito
+        Object.keys(q).forEach(k => { const t = e.tiers.find(x => x.id === k); if (!t) delete q[k]; else q[k] = Math.min(q[k], Math.max(0, t.qty - (t.sold || 0))); });
+        renderTiers(); renderBuybar(); renderVip();
+      }
+    }, err => { console.error(err); notFound(); });
+  }
+
+  const visibleTiers = () => (e.tiers || []).filter(t => !t.hidden);
+  const count = () => visibleTiers().reduce((a, t) => a + (q[t.id] || 0), 0);
+  const subtotal = () => visibleTiers().reduce((a, t) => a + (q[t.id] || 0) * t.price, 0);
+  const past = () => toDate(e.date).getTime() < Date.now() - 6 * 3600e3;
+
+  function renderAll() {
+    const lineup = (e.lineup || []).filter(Boolean);
+    view.innerHTML = '<a class="back" href="eventos.html?o=' + encodeURIComponent(e.orgId) + '">← Más eventos de ' + esc(e.orgName || "este organizador") + '</a>' +
+      '<div class="evd"><div class="evd-art">' + flyer(e, "big") + '</div><div class="evd-info">' +
+        (!e.published ? '<div class="notice"><b>Borrador.</b><p class="small">Solo tú ves esta página. Publica el evento desde el panel para ponerlo a la venta.</p></div>' : '') +
+        '<div class="page-head"><p class="eyebrow">' + esc([e.genre, e.age || "+18", "organiza " + (e.orgName || "")].filter(Boolean).join(" · ")) + '</p><h1 class="h1 h1-xl">' + esc(e.name) + '</h1></div>' +
+        '<dl class="facts"><div><dt>Cuándo</dt><dd>' + esc(ucf(fmtLong(e.date))) + '<br><span class="mono small">' + fmtTime(e.date) + (e.endTime ? ' – ' + esc(e.endTime) : '') + '</span></dd></div>' +
+        '<div><dt>Dónde</dt><dd>' + esc(e.venueName || "") + '<br><span class="small">' + esc(e.area || "") + '</span></dd></div>' +
+        '<div><dt>Line-up</dt><dd>' + (lineup.length ? lineup.map(esc).join("<br>") : '<span class="small">Por anunciar</span>') + '</dd></div></dl>' +
+        (e.description ? '<p class="lead" style="white-space:pre-line">' + esc(e.description) + '</p>' : '') +
+        '<div class="row"><button class="btn btn-sm" data-act="share">Compartir</button></div>' +
+        '<h2 class="h2">Entradas</h2><div class="tiers" id="tiers"></div>' +
+        (past() ? '<div class="notice"><b>Este evento ya ha pasado.</b></div>' :
+        '<form class="form" id="buyForm" novalidate>' +
+          '<div class="grid2"><div class="field"><label for="bName">Tu nombre</label><input id="bName" autocomplete="name" required placeholder="Nombre y apellido"></div>' +
+          '<div class="field"><label for="bEmail">Tu email</label><input id="bEmail" type="email" autocomplete="email" inputmode="email" required placeholder="tu@email.com"></div></div>' +
+          (rrppCode ? '<p class="small">Vienes de parte de <b class="mono">' + esc(rrppCode) + '</b>.</p>' : '') +
+          (PAGOS === 'prueba' ? '<p class="hint">Versión de prueba: no se cobra nada. Las entradas son de prueba.</p>' : '') +
+          '<p class="err" id="buyErr" hidden></p>' +
+          '<div class="buybar" id="buybar"></div>' +
+        '</form>') +
+        '<div id="vip"></div>' +
+      '</div></div>';
+    renderTiers(); renderBuybar(); renderVip();
+    const f = $("#buyForm"); if (f) f.addEventListener("submit", ev => { ev.preventDefault(); buy(); });
+  }
+
+  function renderTiers() {
+    const box = $("#tiers"); if (!box) return;
+    const tiers = visibleTiers();
+    if (!tiers.length) { box.innerHTML = '<p class="small" style="padding:14px 0">Aún no hay entradas a la venta.</p>'; return; }
+    box.innerHTML = tiers.map(t => {
+      const left = t.qty - (t.sold || 0), out = left <= 0, v = q[t.id] || 0;
+      const state = out ? "Agotada" : left <= 50 ? "Quedan " + left : "Disponible";
+      return '<div class="tier' + (out ? ' is-out' : '') + '"><div class="tier-info"><b>' + esc(t.name) + '</b><span class="small">' + (t.note ? esc(t.note) + ' · ' : '') + state + '</span></div>' +
+        '<div class="tier-right"><span class="tier-price">' + eur(t.price) + '</span>' + (out || past() ? (out ? '<span class="chip chip-bad">Agotada</span>' : '') : stepper("tq", t.id, v, Math.min(10, left))) + '</div></div>';
+    }).join("");
+  }
+
+  function renderBuybar() {
+    const box = $("#buybar"); if (!box) return;
+    const n = count(), fee = n * FEE_PER_TICKET, total = subtotal() + fee;
+    box.innerHTML = '<div><span class="small">' + (n ? n + ' entrada' + (n > 1 ? 's' : '') + ' + ' + eur(fee) + ' de gestión' : 'Elige tus entradas') + '</span><strong class="buy-total">' + eur(total) + '</strong></div>' +
+      '<button class="btn btn-primary" type="submit" ' + (n && !busy ? '' : 'disabled') + '>' + (busy ? 'Un momento…' : (PAGOS === 'prueba' ? 'Comprar (prueba)' : 'Pagar')) + '</button>';
+  }
+
+  function renderVip() {
+    const box = $("#vip"); if (!box) return;
+    const tables = (org && org.tables) || [];
+    if (!tables.length || e.vipEnabled === false || past()) { box.innerHTML = ""; return; }
+    const taken = new Set(e.taken || []);
+    const free = tables.filter(t => !taken.has(t.id));
+    const minT = Math.min.apply(null, tables.map(t => t.min || 0));
+    box.innerHTML = '<div class="vipbox"><div><p class="eyebrow eyebrow-brass">Mesas VIP</p><p><b>' + free.length + ' de ' + tables.length + ' libres</b> · consumo mínimo desde ' + eur(minT) + '</p></div>' +
+      '<button class="btn btn-brass" type="button" data-act="vip" ' + (free.length ? '' : 'disabled') + '>Reservar mesa</button></div>';
+    // Si alguien reserva justo la mesa que estabas mirando, se actualiza el plano
+    const open = document.querySelector(".sheet:not([hidden]) #vipForm");
+    if (open && (!vip.table || taken.has(vip.table))) { saveVipInputs(); setSheet(vipHtml()); }
+  }
+
+  function vipHtml() {
+    const tables = org.tables || [], t = vip.table ? tables.find(x => x.id === vip.table) : null;
+    const takenNow = t && (e.taken || []).includes(t.id);
+    const dep = t ? Math.round((t.min || 0) * DEPOSIT_PCT / 100) : 0;
+    return '<form id="vipForm" class="form" novalidate><p class="eyebrow eyebrow-brass">Reserva VIP · ' + esc(ucf(fmtLong(e.date))) + '</p><h2 class="h2 sheet-t">' + esc(e.name) + '</h2><p class="small">Elige una mesa libre en el plano.</p>' +
+      mapHtml({ zones: org.zones || [], tables }, { taken: e.taken || [], act: "pick", sel: vip.table }) + legend() +
+      (t && !takenNow
+        ? '<div class="tsel"><span class="tag-t">' + esc(t.id) + '</span><div><b>Hasta ' + t.pax + ' personas</b><span class="small">Consumo mínimo de ' + eur(t.min) + ' en botellas o copas</span></div></div>' +
+          '<div class="grid2"><div class="field"><label for="vName">A nombre de</label><input id="vName" required autocomplete="name" value="' + esc(vip.name) + '"></div>' +
+          '<div class="field"><label for="vPeople">Personas</label><input id="vPeople" type="number" inputmode="numeric" min="1" max="' + t.pax + '" value="' + esc(vip.people || Math.min(t.pax, 6)) + '"></div></div>' +
+          '<div class="grid2"><div class="field"><label for="vEmail">Email</label><input id="vEmail" type="email" inputmode="email" autocomplete="email" required value="' + esc(vip.email) + '"></div>' +
+          '<div class="field"><label for="vPhone">Teléfono (opcional)</label><input id="vPhone" type="tel" autocomplete="tel" value="' + esc(vip.phone) + '"></div></div>' +
+          '<ul class="sum"><li><span>Señal ahora (' + DEPOSIT_PCT + ' %)</span><span class="mono">' + eur(dep) + '</span></li><li class="sum-fee"><span>El resto, en el local</span><span class="mono">' + eur((t.min || 0) - dep) + '</span></li></ul>' +
+          '<p class="err" id="vipErr" hidden></p>' +
+          '<button class="btn btn-brass btn-block" type="submit">' + (PAGOS === 'prueba' ? 'Reservar (prueba, sin cobrar)' : 'Pagar señal de ' + eur(dep)) + '</button>'
+        : '<p class="hint center">' + (takenNow ? 'Esa mesa se acaba de reservar. Elige otra.' : 'Toca una mesa dorada para elegirla.') + '</p>') +
+      '</form>';
+  }
+
+  function saveVipInputs() {
+    const g = s => { const el = document.getElementById(s); return el ? el.value : null; };
+    if (g("vName") != null) vip.name = g("vName");
+    if (g("vEmail") != null) vip.email = g("vEmail");
+    if (g("vPhone") != null) vip.phone = g("vPhone");
+    if (g("vPeople") != null) vip.people = g("vPeople");
+  }
+
+  async function buy() {
+    if (busy) return;
+    const name = $("#bName").value.trim(), email = $("#bEmail").value.trim(), err = $("#buyErr");
+    err.hidden = true;
+    if (!count()) return;
+    if (!name) { err.textContent = "Escribe tu nombre."; err.hidden = false; $("#bName").focus(); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Escribe un email válido."; err.hidden = false; $("#bEmail").focus(); return; }
+    busy = true; renderBuybar();
+    try {
+      const items = {}; visibleTiers().forEach(t => { if (q[t.id]) items[t.id] = q[t.id]; });
+      const r = await crearPago({ kind: "tickets", eventId: e.id, items, name, email, rrppCode });
+      location.href = r.url;
+    } catch (x) {
+      busy = false; renderBuybar();
+      err.textContent = x.message; err.hidden = false;
+    }
+  }
+
+  async function payVip() {
+    saveVipInputs();
+    const t = (org.tables || []).find(x => x.id === vip.table), err = document.getElementById("vipErr");
+    if (!t) return;
+    if (!vip.name.trim()) { err.textContent = "Escribe a nombre de quién va la reserva."; err.hidden = false; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vip.email.trim())) { err.textContent = "Escribe un email válido."; err.hidden = false; return; }
+    setSheet(paying("Preparando el pago de la señal…"));
+    try {
+      const r = await crearPago({ kind: "table", eventId: e.id, tableId: t.id, name: vip.name.trim(), email: vip.email.trim(), phone: vip.phone.trim(), people: vip.people, rrppCode });
+      location.href = r.url;
+    } catch (x) {
+      setSheet(vipHtml());
+      const el = document.getElementById("vipErr"); if (el) { el.textContent = x.message; el.hidden = false; }
+    }
+  }
+
+  delegate(view, {
+    tq(d) {
+      const t = e.tiers.find(x => x.id === d.id); if (!t) return;
+      const max = Math.min(10, t.qty - (t.sold || 0));
+      q[t.id] = Math.max(0, Math.min(max, (q[t.id] || 0) + Number(d.d)));
+      const total = count();
+      if (total > 10) { q[t.id] -= total - 10; toast("Máximo 10 entradas por pedido."); }
+      renderTiers(); renderBuybar();
+    },
+    vip() { openSheet(vipHtml()); },
+    share() { shareOrCopy(e.name, url("evento.html?id=" + encodeURIComponent(e.id))); }
+  });
+  delegate(sheetBody(), {
+    pick(d) { saveVipInputs(); vip.table = d.id; setSheet(vipHtml()); }
+  });
+  sheetBody().addEventListener("submit", ev => { if (ev.target.id === "vipForm") { ev.preventDefault(); payVip(); } });
+</script>
+</body>
+</html>

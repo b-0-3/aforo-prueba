@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mis entradas · Aforo</title>
+<meta name="theme-color" content="#0D0E13">
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/aforo.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./"><svg viewBox="0 0 34 22" aria-hidden="true"><rect x="2.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><rect x="29.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><circle cx="3.5" cy="3.6" r="2.6" fill="var(--brass)"/><circle cx="30.5" cy="3.6" r="2.6" fill="var(--brass)"/><rect x="0" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><rect x="27" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><path d="M4.8 6.4 Q17 19 29.2 6.4" fill="none" stroke="var(--rope)" stroke-width="2.6" stroke-linecap="round"/></svg><span>aforo</span></a>
+    <nav class="top-nav" aria-label="Principal">
+      <a href="eventos.html">Eventos</a>
+      <a href="pedido.html" aria-current="page">Mis entradas</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap main">
+  <section class="page narrow" id="view">
+    <div class="loading"><span class="spin spin-sm"></span>Cargando…</div>
+  </section>
+</main>
+
+<footer class="wrap foot"><div class="foot-in"><span>Aforo</span><span><a href="eventos.html">Más eventos</a></span></div></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+  import { configured, db, doc, getDoc, onSnapshot, notConfiguredHtml } from "./js/firebase.js";
+  import { $, esc, eur, ucf, fmtDay, fmtLong, fmtTime, drawQR, copyText, delegate, toDate, ago } from "./js/ui.js";
+  import { params, rememberOrder, myOrders, forgetOrder } from "./js/public.js";
+
+  const view = $("#view");
+  const id = params.get("id");
+  let ev = null, unsubBar = null;
+
+  if (!configured) view.innerHTML = notConfiguredHtml();
+  else if (id) showOrder(id);
+  else showList();
+
+  delegate(view, {
+    copy() { copyText(location.href, "Enlace copiado. Guárdalo para tener tus entradas a mano."); },
+    forget(d) { forgetOrder(d.id); showList(); }
+  });
+
+  function head(eyebrow, title, lead) {
+    return '<header class="page-head"><p class="eyebrow">' + esc(eyebrow) + '</p><h1 class="h1">' + esc(title) + '</h1>' + (lead ? '<p class="lead">' + lead + '</p>' : '') + '</header>';
+  }
+
+  function showOrder(oid) {
+    onSnapshot(doc(db, "orders", oid), async snap => {
+      if (!snap.exists()) {
+        view.innerHTML = head("Pedido", "No lo encuentro") + '<div class="card empty"><p>Este enlace no corresponde a ningún pedido.</p><a class="btn" href="pedido.html">Ver mis entradas</a></div>';
+        return;
+      }
+      const o = snap.data();
+      if (o.status !== "paid") {
+        const old = o.createdAt && Date.now() - toDate(o.createdAt) > 15 * 60e3;
+        view.innerHTML = head("Pedido", old ? "Pago sin completar" : "Confirmando el pago") +
+          (old
+            ? '<div class="card empty"><p>Este pago no se llegó a completar, así que no se te ha cobrado nada.</p>' + (o.eventId ? '<a class="btn btn-primary" href="evento.html?id=' + encodeURIComponent(o.eventId) + '">Volver a intentarlo</a>' : '') + '</div>'
+            : '<div class="card"><div class="loading" style="padding:8px 0"><span class="spin spin-sm"></span>Estamos confirmando tu pago con el banco. Tarda unos segundos, no cierres esta página.</div></div>');
+        return;
+      }
+      if (o.kind === "tickets") {
+        rememberOrder(oid, o.eventName || "Entradas");
+        if (!ev && o.eventId) { try { const s = await getDoc(doc(db, "events", o.eventId)); ev = s.exists() ? s.data() : null; } catch (e) { ev = null; } }
+        renderTickets(o);
+      } else if (o.kind === "table") {
+        rememberOrder(oid, "Mesa " + o.tableId + " · " + (o.eventName || ""));
+        if (!ev && o.eventId) { try { const s = await getDoc(doc(db, "events", o.eventId)); ev = s.exists() ? s.data() : null; } catch (e) { ev = null; } }
+        renderTable(o);
+      } else if (o.kind === "bar") {
+        rememberOrder(oid, "Pedido mesa " + o.tableId);
+        renderBar(o, null);
+        if (!unsubBar) unsubBar = onSnapshot(doc(db, "orgs", o.orgId, "tableOrders", oid), s => renderBar(o, s.exists() ? s.data() : null), () => {});
+      }
+    }, err => { console.error(err); view.innerHTML = '<div class="notice"><b>No se ha podido cargar el pedido.</b><p class="small">Comprueba tu conexión y recarga.</p></div>'; });
+  }
+
+  function renderTickets(o) {
+    const name = o.eventName || (ev && ev.name) || "Tu evento";
+    const when = ev ? ucf(fmtDay(ev.date)) + ' · ' + fmtTime(ev.date) + ' · ' + (ev.venueName || "") : "";
+    const hue = ev && ev.hue ? ev.hue : 346;
+    const list = o.tickets || [];
+    view.innerHTML = head("¡Ya estás dentro!", list.length === 1 ? "Tu entrada" : "Tus " + list.length + " entradas",
+        "Enseña el QR en la puerta. Guarda este enlace o haz una captura: aquí tendrás siempre tus entradas.") +
+      (o.simulated ? '<div class="notice"><b>Pedido de prueba.</b><p class="small">Los pagos están en modo simulado: no se ha cobrado nada.</p></div>' : '') +
+      '<div class="stubs">' + list.map((t, i) =>
+        '<article class="stub" style="--h:' + hue + '"><div class="stub-main"><p class="eyebrow">' + esc(when) + '</p><h3 class="stub-name">' + esc(name) + '</h3>' +
+        '<p class="small">' + esc(t.tierName || "Entrada") + ' · a nombre de ' + esc(o.buyerName || "") + '</p><p class="small muted">Entrada ' + (i + 1) + ' de ' + list.length + '</p></div>' +
+        '<div class="stub-qr"><div class="qr" data-qr="' + esc(t.code) + '" role="img" aria-label="Código QR de la entrada ' + esc(t.code) + '"></div><span class="mono code">' + esc(t.code) + '</span></div></article>').join("") + '</div>' +
+      '<div class="card"><ul class="sum"><li><span>Entradas</span><span class="mono">' + eur(o.subtotal) + '</span></li><li class="sum-fee"><span>Gastos de gestión</span><span class="mono">' + eur(o.fee) + '</span></li><li class="sum-t"><span>Total pagado</span><span class="mono">' + eur(o.total) + '</span></li></ul>' +
+      '<div class="row"><button class="btn btn-sm" data-act="copy">Copiar enlace de mis entradas</button><a class="btn btn-sm" href="pedido.html">Todas mis entradas</a></div></div>';
+    drawQR(view);
+  }
+
+  function renderTable(o) {
+    const when = ev ? ucf(fmtLong(ev.date)) + ' · ' + fmtTime(ev.date) : "";
+    view.innerHTML = head("Reserva VIP", o.conflict ? "Hay un problema con tu mesa" : "Mesa " + o.tableId + " reservada", o.conflict ? "" : "Al llegar, di tu nombre en la puerta y te acompañan a la mesa.") +
+      (o.conflict ? '<div class="notice"><b>Alguien reservó esta mesa justo antes que tú.</b><p class="small">El local ya está avisado y se pondrá en contacto contigo para darte otra mesa o devolverte la señal.</p></div>' : '') +
+      '<article class="stub stub-vip"><div class="stub-main"><p class="eyebrow eyebrow-brass">' + esc(when) + '</p><h3 class="stub-name">' + esc(o.eventName || "") + '</h3>' +
+      '<p class="small">' + o.people + ' personas · a nombre de ' + esc(o.buyerName || "") + '</p><p class="small">Consumo mínimo ' + eur(o.min) + ' · señal pagada ' + eur(o.total) + '</p></div>' +
+      '<div class="stub-qr"><span class="eyebrow">Mesa</span><span class="bigtag">' + esc(o.tableId) + '</span></div></article>' +
+      '<div class="row"><button class="btn btn-sm" data-act="copy">Copiar enlace de la reserva</button><a class="btn btn-sm" href="pedido.html">Todas mis entradas</a></div>';
+  }
+
+  function renderBar(o, live) {
+    const st = live ? live.status : "nuevo";
+    const label = { nuevo: ["Recibido en barra", "rope"], camino: ["De camino a tu mesa", "warn"], servido: ["Entregado", "ok"] }[st] || ["Recibido", "rope"];
+    view.innerHTML = head("Pedido pagado", "Mesa " + o.tableId, "Te lo llevan a la mesa. Esta página se actualiza sola.") +
+      '<div class="card"><div class="card-h"><h2 class="h2">Estado</h2><span class="chip chip-' + label[1] + '">' + label[0] + '</span></div>' +
+      '<ul class="gl">' + (o.items || []).map(i => '<li><div><b>' + i.qty + '× ' + esc(i.name) + '</b></div><span class="mono">' + eur(i.qty * i.price) + '</span></li>').join("") + '</ul>' +
+      '<ul class="sum"><li class="sum-t"><span>Total pagado</span><span class="mono">' + eur(o.total) + '</span></li></ul>' +
+      (o.simulated ? '<p class="hint">Pedido de prueba: no se ha cobrado nada.</p>' : '') + '</div>';
+  }
+
+  async function showList() {
+    const list = myOrders();
+    if (!list.length) {
+      view.innerHTML = head("En este móvil", "Mis entradas") + '<div class="card empty"><p><b>Aún no hay entradas en este móvil.</b></p><p class="small">Cuando compres, tus entradas aparecerán aquí. Si compraste en otro móvil, abre el enlace de tu pedido.</p><a class="btn btn-primary" href="eventos.html">Ver eventos</a></div>';
+      return;
+    }
+    view.innerHTML = head("En este móvil", "Mis entradas") + '<div class="card"><ul class="gl">' + list.map(x =>
+      '<li><div><a href="pedido.html?id=' + encodeURIComponent(x.id) + '"><b>' + esc(x.label || "Pedido") + '</b></a><span class="small">Comprado ' + esc(ago(x.at)) + '</span></div>' +
+      '<div class="gl-act"><a class="btn btn-sm" href="pedido.html?id=' + encodeURIComponent(x.id) + '">Ver</a><button class="icon-btn" data-act="forget" data-id="' + esc(x.id) + '" aria-label="Quitar de la lista">×</button></div></li>').join("") + '</ul></div>';
+  }
+</script>
+</body>
+</html>

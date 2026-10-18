@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pide desde tu mesa · Aforo</title>
+<meta name="theme-color" content="#0D0E13">
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/aforo.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./"><svg viewBox="0 0 34 22" aria-hidden="true"><rect x="2.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><rect x="29.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><circle cx="3.5" cy="3.6" r="2.6" fill="var(--brass)"/><circle cx="30.5" cy="3.6" r="2.6" fill="var(--brass)"/><rect x="0" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><rect x="27" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><path d="M4.8 6.4 Q17 19 29.2 6.4" fill="none" stroke="var(--rope)" stroke-width="2.6" stroke-linecap="round"/></svg><span>aforo</span></a>
+    <nav class="top-nav" aria-label="Principal"><a href="pedido.html">Mis pedidos</a></nav>
+  </div>
+</header>
+
+<main class="wrap main">
+  <section class="page narrow" id="view">
+    <div class="loading"><span class="spin spin-sm"></span>Cargando la carta…</div>
+  </section>
+</main>
+
+<script type="module">
+  import { configured, db, doc, getDoc, notConfiguredHtml } from "./js/firebase.js";
+  import { crearPago } from "./js/pagos.js";
+  import { PAGOS } from "./js/config.js";
+  import { $, esc, eur, stepper, delegate, PRODUCT_CATS } from "./js/ui.js";
+  import { params } from "./js/public.js";
+
+  const view = $("#view");
+  const orgId = params.get("o"), tableId = params.get("t");
+  let org = null, cart = {}, busy = false;
+
+  if (!configured) view.innerHTML = notConfiguredHtml();
+  else if (!orgId || !tableId) view.innerHTML = '<div class="notice"><b>Escanea el QR de tu mesa.</b><p class="small">Este enlace está incompleto.</p></div>';
+  else load();
+
+  async function load() {
+    try {
+      const s = await getDoc(doc(db, "orgs", orgId));
+      if (!s.exists()) { view.innerHTML = '<div class="notice"><b>Este local no existe.</b></div>'; return; }
+      org = s.data();
+      if (!(org.tables || []).some(t => t.id === tableId)) { view.innerHTML = '<div class="notice"><b>Esta mesa no existe.</b><p class="small">Escanea otra vez el QR de tu mesa o pide en la barra.</p></div>'; return; }
+      if (org.clickPay === false) { view.innerHTML = '<div class="notice"><b>' + esc(org.name) + ' no tiene activados los pedidos desde la mesa.</b><p class="small">Pide a un camarero.</p></div>'; return; }
+      document.title = "Mesa " + tableId + " · " + org.name;
+      render();
+    } catch (e) {
+      console.error(e);
+      view.innerHTML = '<div class="notice"><b>No se ha podido cargar la carta.</b><p class="small">Comprueba tu conexión y recarga.</p></div>';
+    }
+  }
+
+  const products = () => org.products || [];
+  const n = () => products().reduce((a, p) => a + (cart[p.id] || 0), 0);
+  const total = () => products().reduce((a, p) => a + (cart[p.id] || 0) * p.price, 0);
+
+  function render() {
+    const name = ($("#cpName") || {}).value || "";
+    const cats = PRODUCT_CATS.concat(products().map(p => p.cat).filter(c => !PRODUCT_CATS.includes(c)));
+    const used = cats.filter((c, i) => cats.indexOf(c) === i && products().some(p => p.cat === c));
+    view.innerHTML = '<header class="page-head"><p class="eyebrow">' + esc(org.name) + ' · mesa ' + esc(tableId) + '</p><h1 class="h1">Pide sin ir a la barra</h1><p class="lead">Elige, paga con el móvil y te lo traen a la mesa.</p></header>' +
+      used.map(c => '<div><h2 class="h2">' + esc(c) + '</h2><div class="menu" style="margin-top:8px">' + products().filter(p => p.cat === c).map(p =>
+        '<div class="menu-row"><div><b>' + esc(p.name) + '</b><span class="mono small">' + eur(p.price) + '</span></div>' + stepper("cart", p.id, cart[p.id] || 0, 20) + '</div>').join("") + '</div></div>').join("") +
+      '<div class="field"><label for="cpName">Tu nombre (opcional, para que te encuentren)</label><input id="cpName" autocomplete="given-name" value="' + esc(name) + '"></div>' +
+      (PAGOS === 'prueba' ? '<p class="hint">Versión de prueba: no se cobra nada.</p>' : '') +
+      '<p class="err" id="cpErr" hidden></p>' +
+      '<div class="buybar"><div><span class="small">Mesa ' + esc(tableId) + ' · ' + n() + ' producto' + (n() === 1 ? '' : 's') + '</span><strong class="buy-total">' + eur(total()) + '</strong></div>' +
+      '<button class="btn btn-primary" data-act="pay" ' + (n() && !busy ? '' : 'disabled') + '>' + (busy ? 'Un momento…' : (PAGOS === 'prueba' ? 'Pedir (prueba)' : 'Pagar y pedir')) + '</button></div>';
+  }
+
+  delegate(view, {
+    cart(d) { cart[d.id] = Math.max(0, Math.min(20, (cart[d.id] || 0) + Number(d.d))); if (!cart[d.id]) delete cart[d.id]; render(); },
+    async pay() {
+      if (busy || !n()) return;
+      busy = true; const name = $("#cpName").value.trim(); render();
+      try {
+        const r = await crearPago({ kind: "bar", orgId, tableId, items: cart, name });
+        location.href = r.url;
+      } catch (x) {
+        busy = false; render();
+        const el = $("#cpErr"); el.textContent = x.message; el.hidden = false;
+      }
+    }
+  });
+</script>
+</body>
+</html>

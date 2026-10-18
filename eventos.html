@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Eventos · Aforo</title>
+<meta name="theme-color" content="#0D0E13">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/aforo.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./"><svg viewBox="0 0 34 22" aria-hidden="true"><rect x="2.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><rect x="29.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><circle cx="3.5" cy="3.6" r="2.6" fill="var(--brass)"/><circle cx="30.5" cy="3.6" r="2.6" fill="var(--brass)"/><rect x="0" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><rect x="27" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><path d="M4.8 6.4 Q17 19 29.2 6.4" fill="none" stroke="var(--rope)" stroke-width="2.6" stroke-linecap="round"/></svg><span>aforo</span></a>
+    <nav class="top-nav" aria-label="Principal">
+      <a href="eventos.html" aria-current="page">Eventos</a>
+      <a href="pedido.html">Mis entradas</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap main">
+  <section class="page" id="view">
+    <div class="loading"><span class="spin spin-sm"></span>Cargando eventos…</div>
+  </section>
+</main>
+
+<footer class="wrap foot"><div class="foot-in"><span>Aforo</span><span><a href="pedido.html">Mis entradas</a> · <a href="app/">Acceso locales</a></span></div></footer>
+
+<script type="module">
+  import { configured, db, collection, query, where, getDocs, doc, getDoc, notConfiguredHtml } from "./js/firebase.js";
+  import { esc, eur, fmtDay, flyer, fromPrice, evStatus, toDate } from "./js/ui.js";
+  import { params, rememberRrpp } from "./js/public.js";
+
+  const view = document.getElementById("view");
+  const orgFilter = params.get("o");
+  if (orgFilter && params.get("rrpp")) rememberRrpp(orgFilter, params.get("rrpp"));
+
+  async function load() {
+    if (!configured) { view.innerHTML = notConfiguredHtml(); return; }
+    try {
+      const cons = [where("published", "==", true)];
+      if (orgFilter) cons.push(where("orgId", "==", orgFilter));
+      const snap = await getDocs(query(collection(db, "events"), ...cons));
+      const from = Date.now() - 8 * 3600e3;
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .filter(e => toDate(e.date).getTime() >= from)
+        .sort((a, b) => toDate(a.date) - toDate(b.date));
+      let title = "¿Dónde salimos?", eyebrow = "Próximas noches";
+      if (orgFilter) {
+        const o = await getDoc(doc(db, "orgs", orgFilter));
+        if (o.exists()) { title = o.data().name; eyebrow = "Próximos eventos"; document.title = o.data().name + " · Aforo"; }
+      }
+      view.innerHTML = '<header class="page-head"><p class="eyebrow">' + esc(eyebrow) + '</p><h1 class="h1">' + esc(title) + '</h1><p class="lead">Compra tu entrada en dos toques. Te llega al momento con su QR.</p></header>' +
+        (list.length
+          ? '<div class="ev-grid">' + list.map(e => {
+              const st = evStatus(e), fp = fromPrice(e);
+              return '<a class="evc" href="evento.html?id=' + encodeURIComponent(e.id) + '">' + flyer(e, "card") +
+                '<div class="evc-meta"><div class="evc-row"><span class="eyebrow">' + esc(fmtDay(e.date)) + ' · ' + esc(e.venueName || "") + '</span>' + (st[1] ? '<span class="chip chip-' + st[1] + '">' + st[0] + '</span>' : '') + '</div>' +
+                '<p class="small">' + esc(e.genre || "") + (fp != null ? ' · desde <b>' + eur(fp) + '</b>' : '') + '</p></div></a>';
+            }).join("") + '</div>'
+          : '<div class="card empty"><p><b>No hay eventos a la venta ahora mismo.</b></p><p class="small">Vuelve pronto.</p></div>');
+    } catch (err) {
+      console.error(err);
+      view.innerHTML = '<div class="notice"><b>No se han podido cargar los eventos.</b><p class="small">Comprueba tu conexión y recarga la página.</p></div>';
+    }
+  }
+  load();
+</script>
+</body>
+</html>
