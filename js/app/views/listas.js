@@ -63,9 +63,12 @@ export default function (ctx, el) {
       : [el.querySelector("#gName").value.trim()].filter(Boolean);
     if (!names.length) return;
     try {
-      const batch = writeBatch(db);
-      names.forEach(name => batch.set(doc(collection(db, "orgs", ctx.orgId, "guests")), { eventId: e.id, name, type, rrppId, addedBy: ctx.uid, inAt: null, createdAt: serverTimestamp() }));
-      await batch.commit();
+      // En grupos de 8: Firebase limita cuántas comprobaciones de seguridad hace por envío
+      for (let i = 0; i < names.length; i += 8) {
+        const batch = writeBatch(db);
+        names.slice(i, i + 8).forEach(name => batch.set(doc(collection(db, "orgs", ctx.orgId, "guests")), { eventId: e.id, name, type, rrppId, addedBy: ctx.uid, inAt: null, createdAt: serverTimestamp() }));
+        await batch.commit();
+      }
       ctx.log(names.length === 1 ? names[0] + " añadido a la lista de " + e.name : names.length + " nombres añadidos a la lista de " + e.name);
       toast(names.length === 1 ? names[0] + " está en la lista." : names.length + " nombres añadidos.");
       const i = el.querySelector(bulk ? "#gBulk" : "#gName"); if (i) { i.value = ""; i.focus(); }

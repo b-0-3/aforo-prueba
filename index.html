@@ -33,14 +33,34 @@
         <h1 class="hero-t">Llena la sala. <em>Cobra</em> la barra. Sin Excel.</h1>
         <p class="lead">Vende entradas online, controla la puerta con el móvil, paga a tus RRPP y cobra copas y mesas VIP desde un solo sitio. El dinero va directo a tu cuenta.</p>
         <div class="row" style="margin-top:8px">
-          <a class="btn btn-primary" href="app/entrar.html#registro">Crear cuenta gratis</a>
-          <a class="btn" href="eventos.html">Ver eventos</a>
+          <a class="btn btn-primary" href="#demo">Pruébalo ya, sin registrarte</a>
+          <a class="btn" href="app/entrar.html#registro">Crear cuenta gratis</a>
         </div>
       </div>
       <div class="flyer flyer-big" style="--h:346" aria-hidden="true">
         <div class="fl-top"><span>Sábado · 23:30</span><span>Tu sala</span></div>
         <div class="fl-name">Lleno total</div>
         <div class="fl-bot"><span>Entradas · Puerta · RRPP · Mesas · Barra</span></div>
+      </div>
+    </section>
+
+    <section class="card demo-box" id="demo">
+      <div class="page-head">
+        <p class="eyebrow eyebrow-brass">Demo en directo · sin registrarte · no se cobra nada</p>
+        <h2 class="h1">Pruébalo ya</h2>
+        <p class="lead"><b>1.</b> Compra una entrada de prueba para uno de estos eventos. <b>2.</b> Entra al panel como portero y escanéala, o como dueño y mira cómo entra la venta.</p>
+      </div>
+      <div class="ev-grid" id="demoEvents"><div class="loading"><span class="spin spin-sm"></span>Preparando los eventos de ejemplo…</div></div>
+      <div class="field">
+        <span class="lbl">Entrar al panel de la demo como</span>
+        <div class="row" id="demoRoles">
+          <button class="btn btn-primary" data-role="owner">Dueño del local</button>
+          <button class="btn" data-role="puerta">Portero</button>
+          <button class="btn" data-role="barra">Camarero</button>
+          <button class="btn" data-role="rrpp">RRPP</button>
+        </div>
+        <p class="hint">Truco: abre la puerta en el ordenador, compra con el móvil y escanea el QR del móvil con la cámara del ordenador. La demo es compartida: lo que hagas lo verán otros que la prueben.</p>
+        <p class="err" id="demoErr" hidden></p>
       </div>
     </section>
 
@@ -78,8 +98,42 @@
 
 <script type="module">
   import { FEE_PER_TICKET } from "./js/config.js";
-  import { eur } from "./js/ui.js";
+  import { eur, esc, fmtDay, flyer, fromPrice, evStatus, toDate } from "./js/ui.js";
+  import { configured, db, collection, query, where, getDocs } from "./js/firebase.js";
+  import { ensureDemo, probarComo, DEMO_ORG } from "./js/demo.js";
   document.getElementById("fee").textContent = eur(FEE_PER_TICKET);
+
+  const box = document.getElementById("demoEvents"), err = document.getElementById("demoErr");
+  async function demoEvents() {
+    if (!configured) { box.innerHTML = '<p class="small">Falta conectar Firebase.</p>'; return; }
+    await ensureDemo();
+    try {
+      let list = [];
+      for (let i = 0; i < 6 && !list.length; i++) {
+        if (i) await new Promise(r => setTimeout(r, 1500));
+        const s = await getDocs(query(collection(db, "events"), where("orgId", "==", DEMO_ORG), where("published", "==", true)));
+        list = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => toDate(e.date).getTime() >= Date.now() - 8 * 3600e3).sort((a, b) => toDate(a.date) - toDate(b.date));
+      }
+      box.innerHTML = list.length ? list.map(e => {
+        const st = evStatus(e), fp = fromPrice(e);
+        return '<a class="evc" href="evento.html?id=' + encodeURIComponent(e.id) + '">' + flyer(e, "card") +
+          '<div class="evc-meta"><div class="evc-row"><span class="eyebrow">' + esc(fmtDay(e.date)) + ' · ' + esc(e.venueName || "") + '</span>' + (st[1] ? '<span class="chip chip-' + st[1] + '">' + st[0] + '</span>' : '') + '</div>' +
+          '<p class="small">' + esc(e.genre || "") + (fp != null ? ' · desde <b>' + eur(fp) + '</b>' : '') + '</p></div></a>';
+      }).join("") : '<p class="small">Ahora mismo no hay eventos de ejemplo. Recarga en un momento.</p>';
+    } catch (e) { console.error(e); box.innerHTML = '<p class="small">No se han podido cargar los eventos de ejemplo. Recarga la página.</p>'; }
+  }
+  demoEvents();
+  document.getElementById("demoRoles").addEventListener("click", async ev => {
+    const b = ev.target.closest("[data-role]"); if (!b) return;
+    document.querySelectorAll("#demoRoles button").forEach(x => { x.disabled = true; });
+    const old = b.textContent; b.textContent = "Entrando…"; err.hidden = true;
+    try { await probarComo(b.dataset.role); }
+    catch (e) {
+      console.error(e); b.textContent = old;
+      document.querySelectorAll("#demoRoles button").forEach(x => { x.disabled = false; });
+      err.textContent = "No se pudo entrar en la demo. Recarga la página y vuelve a probar."; err.hidden = false;
+    }
+  });
 </script>
 </body>
 </html>

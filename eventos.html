@@ -35,6 +35,7 @@
   import { configured, db, collection, query, where, getDocs, doc, getDoc, notConfiguredHtml } from "./js/firebase.js";
   import { esc, eur, fmtDay, flyer, fromPrice, evStatus, toDate } from "./js/ui.js";
   import { params, rememberRrpp } from "./js/public.js";
+  import { ensureDemo } from "./js/demo.js";
 
   const view = document.getElementById("view");
   const orgFilter = params.get("o");
@@ -42,6 +43,7 @@
 
   async function load() {
     if (!configured) { view.innerHTML = notConfiguredHtml(); return; }
+    if (!orgFilter) await ensureDemo(); // que siempre haya eventos de ejemplo para probar
     try {
       const cons = [where("published", "==", true)];
       if (orgFilter) cons.push(where("orgId", "==", orgFilter));

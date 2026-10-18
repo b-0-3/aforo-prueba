@@ -1,6 +1,6 @@
 // Puerta: escanear entradas con la cámara, lista de invitados y llegada de mesas.
 import { db, collection, doc, query, where, onSnapshot, runTransaction, writeBatch, updateDoc, serverTimestamp, increment } from "../../firebase.js";
-import { $, esc, num, fmtTime, fmtDay, delegate, openSheet, closeSheet, sheetBody, toast, beep, norm } from "../../ui.js";
+import { $, esc, num, fmtTime, fmtDay, delegate, openSheet, closeSheet, sheetBody, toast, beep, norm, drawQR, url } from "../../ui.js";
 import { watchOrgEvents, pickEvent, setPicked, evPicks, pastPicker, errHtml, noEventsHtml, keepInputs } from "../common.js";
 
 const LIB = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
@@ -68,9 +68,12 @@ export default function (ctx, el) {
       box.innerHTML = '<div class="page" style="gap:12px"><div class="reader-box"><div id="reader"></div><p id="camMsg"' + (camOn ? ' hidden' : '') + '>Toca “Abrir cámara” y apunta al QR de la entrada</p></div>' +
         '<div class="row"><button class="btn ' + (camOn ? '' : 'btn-primary') + '" data-act="cam">' + (camOn ? 'Parar cámara' : 'Abrir cámara') + '</button><span class="small">Funciona con la cámara de cualquier móvil.</span></div>' +
         '<form class="scan-in" id="manual" novalidate><label for="code" class="sr">Código de la entrada</label><input id="code" placeholder="O escribe el código: ' + esc(e.prefix || "ABC") + '-XXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="btn" type="submit">Validar</button></form>' +
-        '<div class="card"><div class="card-h"><h2 class="h2">Últimos escaneos</h2><span class="small">en este móvil</span></div>' + (log.length ? '<ul class="slog">' + log.slice(0, 12).map(l =>
+        (ctx.org.demo ? '<div class="card demo-qr"><div class="qr" data-qr="' + esc(url("evento.html?id=" + encodeURIComponent(e.id))) + '" role="img" aria-label="QR para comprar una entrada de prueba"></div>' +
+          '<div><p class="eyebrow eyebrow-brass">Demo</p><b>¿No tienes entrada?</b><p class="small">Escanea este QR con el móvil, compra una entrada de prueba (no se cobra nada) y luego enséñale el QR de la entrada a esta cámara. También puedes escribir su código arriba.</p></div></div>' : '') +
+        '<div class="card" id="scanLog"><div class="card-h"><h2 class="h2">Últimos escaneos</h2><span class="small">en este móvil</span></div>' + (log.length ? '<ul class="slog">' + log.slice(0, 12).map(l =>
           '<li><span class="mono small">' + fmtTime(l.at) + '</span><div><b>' + esc(l.who || "—") + '</b><span class="mono small">' + esc(l.code) + '</span></div><span class="chip chip-' + (l.ok ? 'ok' : 'bad') + '">' + (l.ok ? '✓ ' : '✕ ') + esc(l.title) + '</span></li>').join("") + '</ul>'
           : '<p class="small muted">Aún no has escaneado nada.</p>') + '</div></div>';
+      drawQR(box, 120);
     } else if (tab === "lista") {
       const f = norm(filter), list = guests.filter(g => !f || norm(g.name).includes(f));
       box.innerHTML = '<div class="page" style="gap:12px"><div class="field"><label for="pSearch">Busca por nombre (' + guests.length + ' en la lista, ' + guests.filter(g => g.inAt).length + ' dentro)</label><input id="pSearch" type="search" placeholder="Escribe un nombre" value="' + esc(filter) + '" autocomplete="off"></div>' +
@@ -170,7 +173,7 @@ export default function (ctx, el) {
     const i = el.querySelector("#code"); if (i && !camOn) i.focus();
   }
   function refreshLog() {
-    const card = el.querySelector("#part .card"); if (!card || tab !== "escanear") return;
+    const card = el.querySelector("#scanLog"); if (!card || tab !== "escanear") return;
     card.innerHTML = '<div class="card-h"><h2 class="h2">Últimos escaneos</h2><span class="small">en este móvil</span></div>' + (log.length ? '<ul class="slog">' + log.slice(0, 12).map(l =>
       '<li><span class="mono small">' + fmtTime(l.at) + '</span><div><b>' + esc(l.who || "—") + '</b><span class="mono small">' + esc(l.code) + '</span></div><span class="chip chip-' + (l.ok ? 'ok' : 'bad') + '">' + (l.ok ? '✓ ' : '✕ ') + esc(l.title) + '</span></li>').join("") + '</ul>' : '<p class="small muted">Aún no has escaneado nada.</p>');
   }

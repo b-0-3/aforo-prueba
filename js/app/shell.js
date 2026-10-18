@@ -38,6 +38,7 @@ const home = () => ({ puerta: "puerta", barra: "barra", rrpp: "mipanel" }[ctx.ro
 
 function header() {
   $("#orgName").textContent = ctx.org ? ctx.org.name : "";
+  $("#demoBar").hidden = !(ctx.org && ctx.org.demo);
   $("#logout").hidden = false;
   const site = $("#siteLink");
   if (ctx.org && ctx.isAdmin()) { site.hidden = false; site.href = url("eventos.html?o=" + encodeURIComponent(ctx.orgId)); }
@@ -86,6 +87,7 @@ function onboarding() {
 function start() {
   if (!configured) { view.innerHTML = notConfiguredHtml(); return; }
   $("#logout").addEventListener("click", async () => { await signOut(auth); location.replace(url("app/entrar.html")); });
+  $("#demoExit").addEventListener("click", async () => { await signOut(auth); location.replace(url("index.html#demo")); });
 
   onAuthStateChanged(auth, async u => {
     if (!u) { location.replace(url("app/entrar.html")); return; }

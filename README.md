@@ -39,6 +39,20 @@ Firebase → **Firestore → Reglas**: borra todo, pega **entero** el archivo `f
 
 ---
 
+## Demo para cualquiera (sin registrarse)
+
+La web trae una **Sala Demo** que se monta sola la primera vez que alguien entra: 3 eventos de ejemplo, RRPP, listas de invitados, mesas VIP reservadas, ventas en la barra y un pedido de mesa. No hay que configurar nada.
+
+- En la portada, **Pruébalo ya** enseña los eventos de ejemplo: cualquiera puede comprar una entrada de prueba al momento.
+- Con un botón se entra al panel de la demo como **Dueño**, **Portero**, **Camarero** o **RRPP** (también desde *Entrar*).
+- Truco para enseñarla: abre la puerta en el ordenador, escanea con el móvil el QR de "¿No tienes entrada?", compra, y enséñale el QR de la entrada a la cámara del ordenador.
+- Cuando un evento de ejemplo pasa, vuelve a ponerse a la venta solo en las próximas semanas.
+- La demo es **compartida**: lo que haga uno lo ven los demás.
+
+Cuentas de la demo (contraseña `aforo-demo-2026`): `demo.dueno@example.com`, `demo.puerta@example.com`, `demo.barra@example.com`, `demo.rrpp@example.com`.
+
+**Si alguien la estropea:** en `js/demo.js` sube `VERSION` en 1 (por ejemplo de `1` a `2`) y se vuelve a montar sola.
+
 ## Quién ve qué
 
 - **Dueño / Encargado**: todo.

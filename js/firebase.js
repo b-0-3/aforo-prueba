@@ -17,6 +17,15 @@ export const app = configured ? initializeApp(firebaseConfig) : null;
 export const auth = configured ? getAuth(app) : null;
 export const db = configured ? getFirestore(app) : null;
 
+// Segunda conexión, independiente de la sesión del usuario.
+// La usa la demo para prepararse sola sin cerrar la sesión de quien esté dentro.
+let sec = null;
+export function secondary() {
+  if (!configured) return null;
+  if (!sec) { const a = initializeApp(firebaseConfig, "aforo-demo"); sec = { auth: getAuth(a), db: getFirestore(a) }; }
+  return sec;
+}
+
 export {
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   sendPasswordResetEmail, updateProfile,
