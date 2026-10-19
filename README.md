@@ -39,6 +39,22 @@ Firebase → **Firestore → Reglas**: borra todo, pega **entero** el archivo `f
 
 ---
 
+## Novedades (octubre 2026)
+
+- **Puerta sin wifi.** El móvil de la puerta guarda las entradas del evento. Si se va la conexión, sigue validando (y la lista de invitados también) y lo sincroniza todo al volver. La web se puede abrir aunque no haya conexión.
+- **Sección «Entradas»** en el panel: quién ha comprado, buscar, cambiar el nombre, anular (la plaza vuelve a quedar libre y se corrige la comisión del RRPP) y descargar en Excel.
+- **Exportar a Excel**: entradas, liquidación de RRPP, listas de invitados, mesas y caja de la barra.
+- **Códigos de descuento** por evento (% o € por entrada, con usos máximos). Se pueden compartir con un enlace que ya trae el código puesto.
+- **Foto del cartel**: se sube desde el móvil y se reduce sola.
+- **Cancelar un evento**: deja de venderse y el comprador lo ve en su entrada.
+- **Entrada imprimible** y botón para añadir el evento al calendario.
+- **Páginas legales** (`legal.html`) y casilla de «acepto las condiciones» al comprar.
+
+> ⚠️ **Después de actualizar, vuelve a pegar `firestore.rules`** en Firebase → Firestore → Reglas → Publicar. Sin las reglas nuevas no funcionan los descuentos ni la gestión de entradas.
+
+### Datos legales
+Abre `js/config.js` y rellena el apartado `LEGAL` (nombre, NIF, domicilio y email). Hasta entonces, `legal.html` enseña esos huecos marcados. Es una plantilla orientativa: antes de cobrar de verdad, que la revise un profesional.
+
 ## Demo para cualquiera (sin registrarse)
 
 La web trae una **Sala Demo** que se monta sola la primera vez que alguien entra: 3 eventos de ejemplo, RRPP, listas de invitados, mesas VIP reservadas, ventas en la barra y un pedido de mesa. No hay que configurar nada.
@@ -74,6 +90,8 @@ Al equipo se le invita desde **Equipo → Invitar** (o **RRPP → Invitar a la a
 | `js/config.js` | Configuración. `PAGOS = "prueba"` es lo que hace que no se cobre |
 | `js/pagos.js` | Las compras simuladas (entradas, mesas y pedidos de barra) |
 | `js/app/views/` | Cada sección del panel |
+| `legal.html` | Aviso legal, condiciones de compra, privacidad y cookies |
+| `sw.js` | Copia de la web en el móvil para que funcione sin conexión |
 | `firestore.rules` | Reglas de seguridad **de prueba** |
 
 ## Problemas típicos

@@ -1,6 +1,6 @@
 // RRPP: equipo de relaciones públicas, sus enlaces, ventas y comisiones.
 import { db, collection, doc, onSnapshot, updateDoc, setDoc, writeBatch, deleteField, serverTimestamp } from "../../firebase.js";
-import { esc, eur, num, delegate, openSheet, setSheet, closeSheet, sheetBody, toast, copyText, shareOrCopy, rid, norm } from "../../ui.js";
+import { esc, eur, num, delegate, openSheet, setSheet, closeSheet, sheetBody, toast, copyText, shareOrCopy, rid, norm, downloadCsv } from "../../ui.js";
 import { confirmTap, errHtml, siteUrl } from "../common.js";
 
 export const rrppLink = (orgId, code) => siteUrl("/eventos.html?o=" + encodeURIComponent(orgId) + "&rrpp=" + encodeURIComponent(code));
@@ -20,7 +20,7 @@ export default function (ctx, el) {
     const totalPend = sorted.reduce((a, r) => a + pending(r), 0);
     el.innerHTML = '<section class="page"><div class="ph"><div class="ph-t"><p class="eyebrow">' + sorted.length + ' personas · ' + eur(totalPend) + ' pendientes de pagar</p><h1 class="h1">RRPP</h1>' +
       '<p class="lead">Cada RRPP vende con su propio enlace. Sus ventas y su comisión se apuntan solas. Invítales a la app para que vean sus números y apunten su lista.</p></div>' +
-      '<button class="btn btn-primary" data-act="new">Añadir RRPP</button></div>' +
+      '<div class="row"><button class="btn" data-act="csv">Descargar liquidación</button><button class="btn btn-primary" data-act="new">Añadir RRPP</button></div></div>' +
       '<div class="card rrlist">' + (sorted.length ? sorted.map((r, i) => {
         const hasApp = members.some(m => m.rrppId === r.id);
         return '<div class="rr"><span class="rr-n mono">' + (i + 1) + '</span><div class="rr-who"><b>' + esc(r.name) + (hasApp ? ' <span class="chip chip-ok">Con app</span>' : '') + '</b>' +
@@ -108,6 +108,11 @@ export default function (ctx, el) {
     }
   });
   const offV = delegate(el, {
+    csv() {
+      if (!list || !list.length) { toast("Aún no tienes RRPP."); return; }
+      downloadCsv("Liquidacion RRPP " + ctx.org.name, [["Nombre", "Código", "Entradas", "Mesas", "€ por entrada", "% mesas", "Ganado", "Pagado", "Pendiente"]]
+        .concat(list.slice().sort((a, b) => (b.soldTotal || 0) - (a.soldTotal || 0)).map(r => [r.name, r.code, r.soldTotal || 0, r.tablesCount || 0, Number(r.perTicket) || 0, Number(r.tablePct) || 0, Number(r.earned) || 0, Number(r.paid) || 0, pending(r)])));
+    },
     new() { editing = {}; openSheet(formHtml()); },
     edit(d) { editing = list.find(x => x.id === d.id); if (editing) openSheet(formHtml()); },
     copy(d) { const r = list.find(x => x.id === d.id); if (r) copyText(rrppLink(ctx.orgId, r.code), "Enlace de " + r.name.split(" ")[0] + " copiado."); },

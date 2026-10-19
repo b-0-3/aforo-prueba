@@ -29,6 +29,7 @@ service cloud.firestore {
     function myRrpp(org) { return get(memberPath(org)).data.rrppId; }
     function onlyChanges(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
     function invite(code) { return get(/databases/$(database)/documents/invites/$(code)).data; }
+    function eventOrg(id) { return getAfter(/databases/$(database)/documents/events/$(id)).data.orgId; }
     // El pedido de prueba se crea en la misma operación que lo que lo acompaña.
     // Una sola consulta por documento (Firebase permite 20 por compra).
     function orderFor(id, org) {
@@ -106,10 +107,14 @@ service cloud.firestore {
           && request.resource.data.orderId is string
           && ticketOrderOk(org);
         allow delete: if false;
-        allow update: if hasRole(org, ['owner', 'admin', 'puerta'])
-          && resource.data.usedAt == null
-          && onlyChanges(['usedAt', 'usedBy'])
-          && request.resource.data.usedBy == request.auth.uid;
+        // Puerta: marcarla como usada (solo una vez y si no está anulada)
+        // Dueño/encargado: además cambiar el nombre o anularla
+        allow update: if (hasRole(org, ['owner', 'admin', 'puerta'])
+            && resource.data.usedAt == null
+            && resource.data.get('voided', false) == false
+            && onlyChanges(['usedAt', 'usedBy'])
+            && request.resource.data.usedBy == request.auth.uid)
+          || (isAdmin(org) && onlyChanges(['buyerName', 'voided', 'voidedAt', 'voidedBy']));
       }
 
       // Pedidos pagados desde la mesa
@@ -148,10 +153,22 @@ service cloud.firestore {
             && onlyChanges(['inside'])
             && request.resource.data.inside == resource.data.get('inside', 0) + 1)
         || (resource.data.published == true
+            && resource.data.get('cancelled', false) == false
             && onlyChanges(['tiers', 'soldTotal', 'revenue', 'daily', 'taken'])
             && request.resource.data.get('soldTotal', 0) >= resource.data.get('soldTotal', 0)
             && request.resource.data.get('taken', []).size() >= resource.data.get('taken', []).size());
       allow delete: if isAdmin(resource.data.orgId) && resource.data.get('soldTotal', 0) == 0;
+
+      // Códigos de descuento: se pueden consultar sabiendo el código; una compra solo suma un uso
+      match /codes/{code} {
+        allow get: if true;
+        allow list, create, delete: if isAdmin(eventOrg(id));
+        allow update: if isAdmin(eventOrg(id))
+          || (resource.data.active == true
+              && onlyChanges(['used'])
+              && request.resource.data.used == resource.data.get('used', 0) + 1
+              && (resource.data.get('max', 0) == 0 || request.resource.data.used <= resource.data.max));
+      }
     }
 
     // Pedidos de clientes. El id es secreto y largo: quien lo tiene ve su pedido.

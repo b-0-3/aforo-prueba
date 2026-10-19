@@ -44,6 +44,7 @@ async function leerEvento(tx, eventId) {
   const es = await tx.get(evRef);
   if (!es.exists() || !es.data().published) fail("Este evento no existe o ya no está a la venta.");
   const e = es.data();
+  if (e.cancelled) fail("Este evento se ha cancelado.");
   if (toDate(e.date).getTime() < Date.now() - 6 * 3600e3) fail("Este evento ya ha pasado.");
   const os = await tx.get(doc(db, "orgs", e.orgId));
   return { evRef, e, org: os.exists() ? os.data() : {} };
@@ -54,10 +55,21 @@ async function entradas(id, b) {
   const name = clean(b.name, 80), email = clean(b.email, 120).toLowerCase();
   if (!name) fail("Escribe tu nombre.");
   if (!okEmail(email)) fail("Escribe un email válido.");
+  const promoCode = String(b.promoCode || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
   await runTransaction(db, async tx => {
     const { evRef, e, org } = await leerEvento(tx, b.eventId);
+    // Código de descuento (se vuelve a comprobar aquí, justo antes de "cobrar")
+    let promo = null, codeRef = null;
+    if (promoCode) {
+      codeRef = doc(db, "events", evRef.id, "codes", promoCode);
+      const cs = await tx.get(codeRef), c = cs.exists() ? cs.data() : null;
+      if (!c || !c.active) fail("El código " + promoCode + " no existe o ya no está activo.");
+      if (c.max && (c.used || 0) >= c.max) fail("El código " + promoCode + " ya se ha usado todas las veces.");
+      promo = { type: c.type, value: Number(c.value) || 0 };
+    }
+    const net = price => !promo ? price : promo.type === "eur" ? Math.max(0, round2(price - promo.value)) : round2(price * (1 - promo.value / 100));
     const tiers = (e.tiers || []).map(t => Object.assign({}, t));
-    const items = []; let n = 0, sub = 0;
+    const items = []; let n = 0, sub = 0, gross = 0;
     for (const [tierId, raw] of Object.entries(b.items || {})) {
       const q = Math.floor(Number(raw)); if (!(q > 0)) continue;
       const t = tiers.find(x => x.id === tierId);
@@ -65,8 +77,9 @@ async function entradas(id, b) {
       const left = t.qty - (t.sold || 0);
       if (q > left) fail(left > 0 ? "Solo quedan " + left + " de " + t.name + "." : t.name + " está agotada.");
       t.sold = (t.sold || 0) + q;
-      items.push({ tierId, name: t.name, qty: q, price: Number(t.price) });
-      n += q; sub += q * Number(t.price);
+      const unit = net(Number(t.price));
+      items.push({ tierId, name: t.name, qty: q, price: unit, listPrice: Number(t.price) });
+      n += q; sub += q * unit; gross += q * Number(t.price);
     }
     if (!n) fail("Elige al menos una entrada.");
     if (n > 10) fail("Puedes comprar 10 entradas como máximo por pedido.");
@@ -82,12 +95,13 @@ async function entradas(id, b) {
       });
     }
     tx.set(doc(db, "orders", id), {
-      kind: "tickets", orgId: e.orgId, eventId: evRef.id, eventName: e.name, items, subtotal: sub, fee, total: round2(sub + fee),
+      kind: "tickets", orgId: e.orgId, eventId: evRef.id, eventName: e.name, items, subtotal: round2(sub), discount: round2(gross - sub), promoCode: promo ? promoCode : null, fee, total: round2(sub + fee),
       buyerName: name, email, rrppId: rr ? rr.id : null, tickets, status: "paid", simulated: true, createdAt: now, paidAt: now
     });
-    tx.update(evRef, { tiers, soldTotal: increment(n), revenue: increment(sub), ["daily." + dayKey(new Date())]: increment(n) });
+    tx.update(evRef, { tiers, soldTotal: increment(n), revenue: increment(round2(sub)), ["daily." + dayKey(new Date())]: increment(n) });
+    if (codeRef) tx.update(codeRef, { used: increment(1) });
     if (rr) tx.update(doc(db, "orgs", e.orgId, "rrpp", rr.id), { ["sold." + evRef.id]: increment(n), soldTotal: increment(n), earned: increment(round2(n * rr.perTicket)) });
-    tx.set(doc(collection(db, "orgs", e.orgId, "activity")), { text: plural(n, "entrada", "entradas") + " · " + e.name + (rr ? " · vía " + rr.code : ""), amount: sub, kind: "ticket", createdAt: now });
+    tx.set(doc(collection(db, "orgs", e.orgId, "activity")), { text: plural(n, "entrada", "entradas") + " · " + e.name + (rr ? " · vía " + rr.code : "") + (promo ? " · código " + promoCode : ""), amount: round2(sub), kind: "ticket", createdAt: now });
   });
 }
 

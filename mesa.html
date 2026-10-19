@@ -26,6 +26,7 @@
     <div class="loading"><span class="spin spin-sm"></span>Cargando la carta…</div>
   </section>
 </main>
+<footer class="wrap foot"><div class="foot-in"><span>Aforo</span><span><a href="legal.html">Legal y privacidad</a></span></div></footer>
 
 <script type="module">
   import { configured, db, doc, getDoc, notConfiguredHtml } from "./js/firebase.js";
@@ -72,6 +73,7 @@
         '<div class="menu-row"><div><b>' + esc(p.name) + '</b><span class="mono small">' + eur(p.price) + '</span></div>' + stepper("cart", p.id, cart[p.id] || 0, 20) + '</div>').join("") + '</div></div>').join("") +
       '<div class="field"><label for="cpName">Tu nombre (opcional, para que te encuentren)</label><input id="cpName" autocomplete="given-name" value="' + esc(name) + '"></div>' +
       (PAGOS === 'prueba' ? '<p class="hint">Versión de prueba: no se cobra nada.</p>' : '') +
+      '<p class="hint">Al pedir aceptas las <a href="legal.html#condiciones">condiciones</a> y la <a href="legal.html#privacidad">política de privacidad</a>.</p>' +
       '<p class="err" id="cpErr" hidden></p>' +
       '<div class="buybar"><div><span class="small">Mesa ' + esc(tableId) + ' · ' + n() + ' producto' + (n() === 1 ? '' : 's') + '</span><strong class="buy-total">' + eur(total()) + '</strong></div>' +
       '<button class="btn btn-primary" data-act="pay" ' + (n() && !busy ? '' : 'disabled') + '>' + (busy ? 'Un momento…' : (PAGOS === 'prueba' ? 'Pedir (prueba)' : 'Pagar y pedir')) + '</button></div>';

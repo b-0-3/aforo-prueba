@@ -30,7 +30,7 @@
   </section>
 </main>
 
-<footer class="wrap foot"><div class="foot-in"><span>Aforo</span><span><a href="eventos.html">Más eventos</a></span></div></footer>
+<footer class="wrap foot"><div class="foot-in"><span>Aforo</span><span><a href="eventos.html">Más eventos</a> · <a href="legal.html">Legal y privacidad</a></span></div></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
@@ -48,6 +48,8 @@
 
   delegate(view, {
     copy() { copyText(location.href, "Enlace copiado. Guárdalo para tener tus entradas a mano."); },
+    print() { window.print(); },
+    ics() { if (ev) downloadIcs(ev); },
     forget(d) { forgetOrder(d.id); showList(); }
   });
 
@@ -93,14 +95,35 @@
     const list = o.tickets || [];
     view.innerHTML = head("¡Ya estás dentro!", list.length === 1 ? "Tu entrada" : "Tus " + list.length + " entradas",
         "Enseña el QR en la puerta. Guarda este enlace o haz una captura: aquí tendrás siempre tus entradas.") +
-      (o.simulated ? '<div class="notice"><b>Pedido de prueba.</b><p class="small">Los pagos están en modo simulado: no se ha cobrado nada.</p></div>' : '') +
+      (ev && ev.cancelled ? '<div class="notice" style="border-left-color:var(--bad)"><b>El evento se ha cancelado.</b><p class="small">El organizador (' + esc(ev.orgName || "") + ') se pondrá en contacto contigo para la devolución.</p></div>' : '') +
+      (o.simulated ? '<div class="notice no-print"><b>Pedido de prueba.</b><p class="small">Los pagos están en modo simulado: no se ha cobrado nada.</p></div>' : '') +
+      '<div class="row no-print"><button class="btn btn-primary btn-sm" data-act="print">Descargar o imprimir</button>' + (ev ? '<button class="btn btn-sm" data-act="ics">Añadir al calendario</button>' : '') + '</div>' +
       '<div class="stubs">' + list.map((t, i) =>
         '<article class="stub" style="--h:' + hue + '"><div class="stub-main"><p class="eyebrow">' + esc(when) + '</p><h3 class="stub-name">' + esc(name) + '</h3>' +
         '<p class="small">' + esc(t.tierName || "Entrada") + ' · a nombre de ' + esc(o.buyerName || "") + '</p><p class="small muted">Entrada ' + (i + 1) + ' de ' + list.length + '</p></div>' +
         '<div class="stub-qr"><div class="qr" data-qr="' + esc(t.code) + '" role="img" aria-label="Código QR de la entrada ' + esc(t.code) + '"></div><span class="mono code">' + esc(t.code) + '</span></div></article>').join("") + '</div>' +
-      '<div class="card"><ul class="sum"><li><span>Entradas</span><span class="mono">' + eur(o.subtotal) + '</span></li><li class="sum-fee"><span>Gastos de gestión</span><span class="mono">' + eur(o.fee) + '</span></li><li class="sum-t"><span>Total pagado</span><span class="mono">' + eur(o.total) + '</span></li></ul>' +
-      '<div class="row"><button class="btn btn-sm" data-act="copy">Copiar enlace de mis entradas</button><a class="btn btn-sm" href="pedido.html">Todas mis entradas</a></div></div>';
+      '<div class="card"><ul class="sum"><li><span>Entradas</span><span class="mono">' + eur(o.subtotal + (o.discount || 0)) + '</span></li>' +
+      (o.discount ? '<li class="sum-fee"><span>Descuento' + (o.promoCode ? ' (' + esc(o.promoCode) + ')' : '') + '</span><span class="mono">' + eur(-o.discount) + '</span></li>' : '') + '<li class="sum-fee"><span>Gastos de gestión</span><span class="mono">' + eur(o.fee) + '</span></li><li class="sum-t"><span>Total pagado</span><span class="mono">' + eur(o.total) + '</span></li></ul>' +
+      '<div class="row no-print"><button class="btn btn-sm" data-act="copy">Copiar enlace de mis entradas</button><a class="btn btn-sm" href="pedido.html">Todas mis entradas</a></div></div>';
     drawQR(view);
+  }
+
+  // Archivo .ics: el móvil lo abre con el calendario
+  function downloadIcs(e) {
+    const start = toDate(e.date), end = new Date(start.getTime() + 6 * 3600e3);
+    if (e.endTime && /^\d{2}:\d{2}$/.test(e.endTime)) {
+      const [h, m] = e.endTime.split(":").map(Number), madrid = new Date(start.toLocaleString("en-US", { timeZone: "Europe/Madrid" }));
+      let mins = (h * 60 + m) - (madrid.getHours() * 60 + madrid.getMinutes()); if (mins <= 0) mins += 1440;
+      end.setTime(start.getTime() + mins * 60000);
+    }
+    const f = d => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const t = x => String(x || "").replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");
+    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Aforo//ES", "BEGIN:VEVENT", "UID:" + e.id + "@aforo", "DTSTAMP:" + f(new Date()), "DTSTART:" + f(start), "DTEND:" + f(end),
+      "SUMMARY:" + t(e.name), "LOCATION:" + t([e.venueName, e.area].filter(Boolean).join(", ")), "DESCRIPTION:" + t("Tus entradas: " + location.href), "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+    a.download = (e.name || "evento").replace(/[^\wáéíóúñÁÉÍÓÚÑ ]+/g, "").trim().replace(/\s+/g, "-") + ".ics";
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
 
   function renderTable(o) {

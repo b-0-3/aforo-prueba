@@ -4,6 +4,11 @@
 export const ROOT = new URL("../", import.meta.url).href;
 export const url = p => new URL(String(p).replace(/^\//, ""), ROOT).href;
 
+// Copia de la web en el móvil para poder abrirla sin conexión (ver sw.js)
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register(url("sw.js")).catch(e => console.warn("Sin modo offline", e)); });
+}
+
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 export const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -90,9 +95,11 @@ export function delegate(root, actions) {
 /* ---------- piezas ---------- */
 export function flyer(e, size) {
   const h = Number(e.hue) || 346;
-  if (size === "mini") return '<div class="flyer flyer-mini" style="--h:' + h + '" aria-hidden="true"></div>';
+  if (size === "mini") return '<div class="flyer flyer-mini' + (e.poster ? ' has-poster' : '') + '" style="--h:' + h + '" aria-hidden="true">' + (e.poster ? '<img src="' + esc(e.poster) + '" alt="">' : '') + '</div>';
   const line = (e.lineup || []).slice(0, 2).join(" · ");
-  return '<div class="flyer flyer-' + size + '" style="--h:' + h + '"><div class="fl-top"><span>' + esc(fmtDay(e.date)) + '</span><span>' + esc(e.venueName || "") + '</span></div><div class="fl-name">' + esc(e.name) + '</div><div class="fl-bot"><span>' + esc(line) + '</span></div></div>';
+  // Si el organizador ha subido la foto del cartel, se enseña esa
+  if (e.poster) return '<div class="flyer flyer-' + size + ' has-poster" style="--h:' + h + '"><img src="' + esc(e.poster) + '" alt="Cartel de ' + esc(e.name) + '" loading="lazy">' + (e.cancelled ? '<span class="fl-cancel">Cancelado</span>' : '') + '</div>';
+  return '<div class="flyer flyer-' + size + '" style="--h:' + h + '">' + (e.cancelled ? '<span class="fl-cancel">Cancelado</span>' : '') + '<div class="fl-top"><span>' + esc(fmtDay(e.date)) + '</span><span>' + esc(e.venueName || "") + '</span></div><div class="fl-name">' + esc(e.name) + '</div><div class="fl-bot"><span>' + esc(line) + '</span></div></div>';
 }
 export function stepper(act, id, v, max) {
   return '<div class="step"><button type="button" data-act="' + act + '" data-id="' + esc(id) + '" data-d="-1" ' + (v <= 0 ? "disabled" : "") + ' aria-label="Quitar uno">−</button><span class="mono">' + v + '</span><button type="button" data-act="' + act + '" data-id="' + esc(id) + '" data-d="1" ' + (v >= max ? "disabled" : "") + ' aria-label="Añadir uno">+</button></div>';
@@ -104,6 +111,7 @@ export function fromPrice(e) {
   return av.length ? Math.min.apply(null, av.map(t => t.price)) : null;
 }
 export function evStatus(e) {
+  if (e.cancelled) return ["Cancelado", "bad"];
   if (!e.published) return ["Borrador", ""];
   const s = soldOf(e), q = qtyOf(e);
   if (toDate(e.date) < new Date(Date.now() - 8 * 3600e3)) return ["Terminado", ""];
@@ -219,3 +227,44 @@ export const DEFAULT_PRODUCTS = [
   { id: "moet", name: "Moët Brut", price: 160, cat: "Botellas" }, { id: "vodka", name: "Botella de vodka + 6 refrescos", price: 120, cat: "Botellas" },
   { id: "chupito", name: "Chupito", price: 4, cat: "Otros" }, { id: "refresco", name: "Refresco", price: 4, cat: "Otros" }, { id: "agua", name: "Agua", price: 3, cat: "Otros" }
 ];
+
+/* ---------- Excel (CSV que Excel abre bien en español) ---------- */
+// rows: array de arrays. Los números se escriben con coma decimal.
+export function downloadCsv(name, rows) {
+  const cell = v => {
+    if (v == null) return "";
+    if (typeof v === "number") return String(Math.round(v * 100) / 100).replace(".", ",");
+    if (v && typeof v.toDate === "function") v = v.toDate();
+    if (v instanceof Date) return new Intl.DateTimeFormat("es-ES", { dateStyle: "short", timeStyle: "short", timeZone: TZ }).format(v);
+    const t = String(v);
+    return /[";\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  const csv = "\ufeff" + rows.map(r => r.map(cell).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = name.replace(/[^\w\-áéíóúñÁÉÍÓÚÑ ]+/g, "").trim().replace(/\s+/g, "-") + ".csv";
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+
+/* ---------- Fotos: se reducen en el móvil antes de guardarlas ---------- */
+// Devuelve una imagen JPEG en texto (data URL) de como mucho maxW px de ancho y ~maxKB
+export function compressImage(file, maxW = 900, maxKB = 220) {
+  return new Promise((ok, ko) => {
+    if (!file || !/^image\//.test(file.type)) return ko(new Error("Eso no es una imagen."));
+    const img = new Image(), src = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(src);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      let q = .82, out = cv.toDataURL("image/jpeg", q);
+      while (out.length * .75 > maxKB * 1024 && q > .4) { q -= .08; out = cv.toDataURL("image/jpeg", q); }
+      if (out.length * .75 > maxKB * 1024 * 1.6) return ko(new Error("La imagen es demasiado pesada. Prueba con otra."));
+      ok(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(src); ko(new Error("No se pudo leer la imagen.")); };
+    img.src = src;
+  });
+}

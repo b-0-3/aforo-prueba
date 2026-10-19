@@ -14,7 +14,7 @@ import {
 import { DEFAULT_LAYOUTS, DEFAULT_PRODUCTS, dayKey, toDate, rid, url } from "./ui.js";
 
 export const DEMO_ORG = "demo";
-const VERSION = 1;
+const VERSION = 2;
 const PASS = "aforo-demo-2026";
 export const DEMO_ACCOUNTS = {
   owner: { email: "demo.dueno@example.com", name: "Dueño Demo", role: "owner", go: "#resumen" },
@@ -86,8 +86,13 @@ async function commit(db, ops, size = 8) {
 }
 
 // Pone un evento de ejemplo (y sus listas y mesas) como nuevo
+// Códigos de descuento de ejemplo para probar
+const CODES = { "demo-e1": { DEMO10: { type: "pct", value: 10 } }, "demo-e2": { "2EUROS": { type: "eur", value: 2 } } };
+export const DEMO_CODE = "DEMO10";
+
 function eventOps(db, ev) {
   const ops = [b => b.set(doc(db, "events", ev.id), eventDoc(ev))];
+  Object.entries(CODES[ev.id] || {}).forEach(([code, c]) => ops.push(b => b.set(doc(db, "events", ev.id, "codes", code), { type: c.type, value: c.value, max: 0, used: 0, active: true, createdAt: serverTimestamp() })));
   ev.guests.forEach((g, i) => ops.push(b => b.set(doc(db, "orgs", DEMO_ORG, "guests", ev.id + "-g" + i), { eventId: ev.id, name: g[0], type: g[1], rrppId: g[2], inAt: null, createdAt: serverTimestamp() })));
   ev.res.forEach((r, i) => ops.push(b => b.set(doc(db, "orgs", DEMO_ORG, "reservations", ev.id + "-r" + i), { eventId: ev.id, tableId: r[0], name: r[1], people: r[2], min: r[3], deposit: r[4], rrppId: r[5], phone: "", email: "", source: "manual", orderId: null, arrivedAt: null, createdAt: serverTimestamp() })));
   return ops;
@@ -114,7 +119,8 @@ async function loginOrSignup(a, acc) {
 async function readOrg(db) { const os = await getDoc(doc(db, "orgs", DEMO_ORG)); return os.exists() ? os.data() : null; }
 const ready = o => !!o && o.demoVersion >= VERSION;
 // Otro navegador empezó a montarla hace poco: mejor esperar que duplicar
-const inProgress = o => !!o && !ready(o) && o.createdAt && Date.now() - toDate(o.createdAt).getTime() < 90e3;
+// (si ya tiene una versión anterior no está "montándose": hay que actualizarla)
+const inProgress = o => !!o && !ready(o) && !o.demoVersion && o.createdAt && Date.now() - toDate(o.createdAt).getTime() < 90e3;
 async function waitReady(db, ms) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) { if (ready(await readOrg(db))) return true; await sleep(1500); }
@@ -200,7 +206,9 @@ async function seedAll(a, db) {
 async function refresh(a, db) {
   const q = await getDocs(query(collection(db, "events"), where("orgId", "==", DEMO_ORG), where("published", "==", true)));
   const live = new Map(q.docs.map(d => [d.id, d.data()]));
-  const stale = EVENTS.filter(ev => { const e = live.get(ev.id); return !e || toDate(e.date).getTime() < Date.now() - 8 * 3600e3; });
+  // Se reponen los que ya pasaron y los que algún visitante ha cancelado, despublicado o dejado sin entradas
+  const broken = e => !e || e.cancelled || !e.published || toDate(e.date).getTime() < Date.now() - 8 * 3600e3 || !(e.tiers || []).some(t => !t.hidden && (t.sold || 0) < t.qty);
+  const stale = EVENTS.filter(ev => broken(live.get(ev.id)));
   if (!stale.length) return;
   await loginOrSignup(a, DEMO_ACCOUNTS.owner);
   for (const ev of stale) {

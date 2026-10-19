@@ -33,3 +33,14 @@ export const APP_NAME = "Aforo";
 //    "stripe" → cobros reales con Stripe. Necesita las funciones de Netlify
 //               (repo privado b-0-3/aforo) y las reglas de seguridad de producción.
 export const PAGOS = "prueba";
+
+// 5) Tus datos para las páginas legales (legal.html). Hasta que los rellenes,
+//    la página los enseña marcados como pendientes.
+//    Ojo: es una plantilla orientativa. Antes de cobrar de verdad, que la revise un profesional.
+export const LEGAL = {
+  titular: "",        // Tu nombre y apellidos (o el de tu empresa)
+  nif: "",            // Tu DNI/NIF o CIF
+  domicilio: "",      // Dirección fiscal
+  email: "",          // Email de contacto para clientes
+  web: ""             // Dirección de la web (si la dejas vacía se usa la actual)
+};

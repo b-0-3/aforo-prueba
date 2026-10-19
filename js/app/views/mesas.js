@@ -1,6 +1,6 @@
 // Mesas VIP: plano en directo y reservas por evento.
 import { db, collection, doc, query, where, onSnapshot, updateDoc, writeBatch, serverTimestamp, arrayUnion, arrayRemove } from "../../firebase.js";
-import { esc, eur, fmtTime, mapHtml, legend, delegate, openSheet, setSheet, closeSheet, sheetBody, toast } from "../../ui.js";
+import { esc, eur, fmtTime, fmtDay, mapHtml, legend, delegate, openSheet, setSheet, closeSheet, sheetBody, toast, downloadCsv } from "../../ui.js";
 import { watchOrgEvents, pickEvent, setPicked, evPicks, pastPicker, confirmTap, errHtml, noEventsHtml } from "../common.js";
 
 export default function (ctx, el) {
@@ -32,7 +32,7 @@ export default function (ctx, el) {
       (e.vipEnabled === false ? '<div class="notice"><b>La venta online de mesas está apagada para este evento.</b><p class="small">Puedes apuntar reservas a mano. Para venderlas online, actívalo en Eventos → Editar.</p></div>' : '') +
       '<div class="pgrid">' +
         '<div class="card"><div class="card-h"><h2 class="h2">Plano</h2><span class="small">Toca una mesa libre para apuntar una reserva por teléfono</span></div>' + mapHtml(layout(), { taken: e.taken || [], arrived, act: "table" }) + legend() + '</div>' +
-        '<div class="card"><div class="card-h"><h2 class="h2">Reservas</h2><span class="small">' + res.length + ' de ' + tables.length + ' · ' + eur(minSum) + ' en mínimos</span></div>' +
+        '<div class="card"><div class="card-h"><h2 class="h2">Reservas</h2><span class="small">' + res.length + ' de ' + tables.length + ' · ' + eur(minSum) + ' en mínimos</span><button class="linkbtn" data-act="csv">Descargar Excel</button></div>' +
         (res.length ? '<ul class="rl">' + res.map(r => {
           const rp = r.rrppId ? team.find(x => x.id === r.rrppId) : null;
           return '<li><span class="tag-t">' + esc(r.tableId) + '</span><div><b>' + esc(r.name) + '</b><span class="small">' + r.people + ' personas · mínimo ' + eur(r.min) + ' · ' + (r.deposit ? 'señal ' + eur(r.deposit) + ' pagada' : 'sin señal') + (rp ? ' · ' + esc(rp.name) : '') + '</span>' +
@@ -75,6 +75,12 @@ export default function (ctx, el) {
   const onSubmit = ev => { if (ev.target.id === "resForm") { ev.preventDefault(); save(); } };
   sheetBody().addEventListener("submit", onSubmit);
   const actions = {
+    csv() {
+      if (!res.length) { toast("No hay reservas."); return; }
+      const rn = id => id ? ((team.find(r => r.id === id) || {}).name || "") : "";
+      downloadCsv("Mesas " + e.name + " " + fmtDay(e.date), [["Mesa", "Nombre", "Personas", "Teléfono", "Email", "Consumo mínimo", "Señal pagada", "RRPP", "Llegada"]]
+        .concat(res.map(r => [r.tableId, r.name, r.people, r.phone || "", r.email || "", Number(r.min) || 0, Number(r.deposit) || 0, rn(r.rrppId), r.arrivedAt || ""])));
+    },
     pickEv(d) { setPicked(d.id); closeSheet(); e = events.find(x => x.id === d.id) || e; sub(); render(); },
     pastEv() { openSheet(pastPicker(events)); },
     table(d) { form = { table: d.id }; openSheet(formHtml()); },

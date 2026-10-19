@@ -1,12 +1,12 @@
 // Barra: TPV para cobrar y pedidos que llegan pagados desde las mesas.
 import { db, collection, doc, query, where, orderBy, limit, onSnapshot, addDoc, updateDoc, serverTimestamp, Timestamp } from "../../firebase.js";
-import { esc, eur, num, ago, stepper, delegate, toast, beep, PRODUCT_CATS } from "../../ui.js";
+import { esc, eur, num, ago, stepper, delegate, toast, beep, PRODUCT_CATS, downloadCsv } from "../../ui.js";
 
 export default function (ctx, el) {
-  let tab = "cobrar", cat = null, ticket = [], sales = { total: 0, n: 0 }, orders = null, sound = false, known = null;
+  let tab = "cobrar", cat = null, ticket = [], sales = { total: 0, n: 0, list: [] }, orders = null, sound = false, known = null;
   const offs = [];
   offs.push(onSnapshot(query(collection(db, "orgs", ctx.orgId, "barSales"), where("createdAt", ">=", Timestamp.fromDate(new Date(Date.now() - 12 * 3600e3)))), s => {
-    sales = { total: s.docs.reduce((a, d) => a + (Number(d.data().total) || 0), 0), n: s.size };
+    sales = { total: s.docs.reduce((a, d) => a + (Number(d.data().total) || 0), 0), n: s.size, list: s.docs.map(d => d.data()) };
     const c = el.querySelector("#caja"); if (c) c.innerHTML = cajaHtml();
   }, () => {}));
   offs.push(onSnapshot(query(collection(db, "orgs", ctx.orgId, "tableOrders"), orderBy("createdAt", "desc"), limit(60)), s => {
@@ -30,7 +30,8 @@ export default function (ctx, el) {
     const nOpen = open().length;
     el.innerHTML = '<section class="page"><div class="ph"><div class="ph-t"><p class="eyebrow">Barra · ' + esc(ctx.org.name) + '</p><h1 class="h1">' + (tab === "cobrar" ? "Cobrar" : "Pedidos de mesa") + '</h1></div><div class="caja" id="caja">' + cajaHtml() + '</div></div>' +
       '<div class="row"><div class="picks"><button class="pick" data-act="tab" data-id="cobrar" aria-pressed="' + (tab === "cobrar") + '">Cobrar</button><button class="pick" data-act="tab" data-id="pedidos" aria-pressed="' + (tab === "pedidos") + '">Pedidos de mesa' + (nOpen ? ' <span class="badge">' + nOpen + '</span>' : '') + '</button></div>' +
-      '<button class="btn btn-sm" data-act="sound">' + (sound ? '🔔 Sonido activado' : '🔕 Activar sonido') + '</button></div>' +
+      '<button class="btn btn-sm" data-act="sound">' + (sound ? '🔔 Sonido activado' : '🔕 Activar sonido') + '</button>' +
+      (ctx.isAdmin() ? '<button class="btn btn-sm" data-act="csv">Descargar caja</button>' : '') + '</div>' +
       (tab === "cobrar" ? cobrarHtml() : pedidosHtml()) + '</section>';
   }
 
@@ -61,6 +62,13 @@ export default function (ctx, el) {
   }
 
   const offV = delegate(el, {
+    csv() {
+      if (!sales.list.length) { toast("No hay cobros en las últimas 12 horas."); return; }
+      const rows = sales.list.slice().sort((a, b) => (a.createdAt ? a.createdAt.toMillis() : 0) - (b.createdAt ? b.createdAt.toMillis() : 0))
+        .map(x => [x.createdAt || "", x.source === "mesa" ? "Pedido de mesa" : "Barra", x.method || "", (x.items || []).map(i => i.qty + "x " + i.name).join(", "), Number(x.total) || 0]);
+      rows.push(["", "", "", "TOTAL", sales.total]);
+      downloadCsv("Caja " + ctx.org.name + " " + new Date().toISOString().slice(0, 10), [["Hora", "Origen", "Pago", "Productos", "Importe"]].concat(rows));
+    },
     tab(d) { tab = d.id; render(); },
     sound() { sound = !sound; if (sound) beep(true); render(); },
     cat(d) { cat = d.id; render(); },

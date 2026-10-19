@@ -6,7 +6,7 @@ import {
   signOut, sendPasswordResetEmail, updateProfile
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection,
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection,
   query, where, orderBy, limit, onSnapshot, serverTimestamp, increment, arrayUnion, arrayRemove,
   runTransaction, writeBatch, Timestamp, deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -15,7 +15,14 @@ import { firebaseConfig } from "./config.js";
 export const configured = !String(firebaseConfig.apiKey || "").startsWith("PEGA");
 export const app = configured ? initializeApp(firebaseConfig) : null;
 export const auth = configured ? getAuth(app) : null;
-export const db = configured ? getFirestore(app) : null;
+// Los datos que ya se han visto se guardan en el móvil: si se va el wifi, la app sigue
+// enseñándolos y apunta los cambios para mandarlos cuando vuelva la conexión.
+function makeDb() {
+  if (!configured) return null;
+  try { return initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
+  catch (e) { console.warn("Sin caché local", e); return getFirestore(app); }
+}
+export const db = makeDb();
 
 // Segunda conexión, independiente de la sesión del usuario.
 // La usa la demo para prepararse sola sin cerrar la sesión de quien esté dentro.

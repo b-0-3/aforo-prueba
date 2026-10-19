@@ -29,7 +29,7 @@
   </section>
 </main>
 
-<footer class="wrap foot"><div class="foot-in"><span>Aforo · versión de prueba, no se cobra nada</span><span><a href="pedido.html">Mis entradas</a></span></div></footer>
+<footer class="wrap foot"><div class="foot-in"><span>Aforo · versión de prueba, no se cobra nada</span><span><a href="pedido.html">Mis entradas</a> · <a href="legal.html">Legal y privacidad</a></span></div></footer>
 
 <script type="module">
   import { configured, db, doc, getDoc, onSnapshot, notConfiguredHtml } from "./js/firebase.js";
@@ -41,7 +41,11 @@
 
   const view = $("#view");
   const id = params.get("id");
-  let e = null, org = null, q = {}, rrppCode = null, vip = { table: null, name: "", email: "", phone: "", people: "" }, busy = false;
+  let e = null, org = null, q = {}, rrppCode = null, vip = { table: null, name: "", email: "", phone: "", people: "" }, busy = false, promo = null;
+  const round2 = n => Math.round(n * 100) / 100;
+  // Precio de una entrada con el código de descuento aplicado
+  const netPrice = t => !promo ? Number(t.price) : promo.type === "eur" ? Math.max(0, round2(t.price - promo.value)) : round2(t.price * (1 - promo.value / 100));
+  const TERMS = 'He leído y acepto las <a href="legal.html#condiciones" target="_blank" rel="noopener">condiciones de compra</a> y la <a href="legal.html#privacidad" target="_blank" rel="noopener">política de privacidad</a>.';
 
   if (!configured) view.innerHTML = notConfiguredHtml();
   else if (!id) view.innerHTML = '<div class="notice"><b>Falta el evento.</b><p class="small"><a href="eventos.html">Ver todos los eventos</a></p></div>';
@@ -53,7 +57,7 @@
 
   async function start() {
     if (String(id).startsWith("demo-")) await ensureDemo(); // por si es la primera visita
-    let first = true;
+    let first = true, wasCancelled = false;
     onSnapshot(doc(db, "events", id), async snap => {
       if (!snap.exists()) { notFound(); return; }
       e = { id: snap.id, ...snap.data() };
@@ -64,20 +68,25 @@
         try { const o = await getDoc(doc(db, "orgs", e.orgId)); org = o.exists() ? o.data() : {}; } catch (err) { org = {}; }
         document.title = e.name + " · Aforo";
         renderAll();
+        if (params.get("codigo") && !closed()) applyPromo(params.get("codigo"), true);
         // evento.html?id=…#mesa abre directamente la reserva de mesa VIP
-        if (location.hash === "#mesa" && !past() && e.vipEnabled !== false && ((org && org.tables) || []).length) openSheet(vipHtml());
+        if (location.hash === "#mesa" && !closed() && e.vipEnabled !== false && ((org && org.tables) || []).length) openSheet(vipHtml());
       } else {
         // Llega una venta o reserva nueva: refrescamos disponibilidad sin perder lo escrito
         Object.keys(q).forEach(k => { const t = e.tiers.find(x => x.id === k); if (!t) delete q[k]; else q[k] = Math.min(q[k], Math.max(0, t.qty - (t.sold || 0))); });
+        if (!!e.cancelled !== wasCancelled) { renderAll(); return; }
         renderTiers(); renderBuybar(); renderVip();
       }
+      wasCancelled = !!e.cancelled;
     }, err => { console.error(err); notFound(); });
   }
 
   const visibleTiers = () => (e.tiers || []).filter(t => !t.hidden);
   const count = () => visibleTiers().reduce((a, t) => a + (q[t.id] || 0), 0);
   const subtotal = () => visibleTiers().reduce((a, t) => a + (q[t.id] || 0) * t.price, 0);
+  const discount = () => round2(visibleTiers().reduce((a, t) => a + (q[t.id] || 0) * (t.price - netPrice(t)), 0));
   const past = () => toDate(e.date).getTime() < Date.now() - 6 * 3600e3;
+  const closed = () => past() || !!e.cancelled;
 
   function renderAll() {
     const lineup = (e.lineup || []).filter(Boolean);
@@ -91,11 +100,14 @@
         (e.description ? '<p class="lead" style="white-space:pre-line">' + esc(e.description) + '</p>' : '') +
         '<div class="row"><button class="btn btn-sm" data-act="share">Compartir</button></div>' +
         '<h2 class="h2">Entradas</h2><div class="tiers" id="tiers"></div>' +
-        (past() ? '<div class="notice"><b>Este evento ya ha pasado.</b></div>' :
+        (e.cancelled ? '<div class="notice" style="border-left-color:var(--bad)"><b>Este evento se ha cancelado.</b><p class="small">Ya no se venden entradas. Si compraste, el organizador se pondrá en contacto contigo para la devolución.</p></div>' :
+         past() ? '<div class="notice"><b>Este evento ya ha pasado.</b></div>' :
         '<form class="form" id="buyForm" novalidate>' +
           '<div class="grid2"><div class="field"><label for="bName">Tu nombre</label><input id="bName" autocomplete="name" required placeholder="Nombre y apellido"></div>' +
           '<div class="field"><label for="bEmail">Tu email</label><input id="bEmail" type="email" autocomplete="email" inputmode="email" required placeholder="tu@email.com"></div></div>' +
           (rrppCode ? '<p class="small">Vienes de parte de <b class="mono">' + esc(rrppCode) + '</b>.</p>' : '') +
+          '<div class="field"><label for="bCode">¿Tienes un código de descuento?</label><div class="promo"><input id="bCode" placeholder="Código" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn btn-sm" data-act="promo">Aplicar</button></div><p class="small" id="promoMsg" hidden></p></div>' +
+          '<label class="terms"><input type="checkbox" id="bTerms"><span>' + TERMS + '</span></label>' +
           (PAGOS === 'prueba' ? '<p class="hint">Versión de prueba: no se cobra nada. Las entradas son de prueba.</p>' : '') +
           '<p class="err" id="buyErr" hidden></p>' +
           '<div class="buybar" id="buybar"></div>' +
@@ -103,7 +115,7 @@
         '<div id="vip"></div>' +
       '</div></div>';
     renderTiers(); renderBuybar(); renderVip();
-    const f = $("#buyForm"); if (f) f.addEventListener("submit", ev => { ev.preventDefault(); buy(); });
+    const f = $("#buyForm"); if (f) f.addEventListener("submit", ev => { ev.preventDefault(); if (document.activeElement && document.activeElement.id === "bCode") { applyPromo(document.activeElement.value); return; } buy(); });
   }
 
   function renderTiers() {
@@ -114,21 +126,21 @@
       const left = t.qty - (t.sold || 0), out = left <= 0, v = q[t.id] || 0;
       const state = out ? "Agotada" : left <= 50 ? "Quedan " + left : "Disponible";
       return '<div class="tier' + (out ? ' is-out' : '') + '"><div class="tier-info"><b>' + esc(t.name) + '</b><span class="small">' + (t.note ? esc(t.note) + ' · ' : '') + state + '</span></div>' +
-        '<div class="tier-right"><span class="tier-price">' + eur(t.price) + '</span>' + (out || past() ? (out ? '<span class="chip chip-bad">Agotada</span>' : '') : stepper("tq", t.id, v, Math.min(10, left))) + '</div></div>';
+        '<div class="tier-right"><span class="tier-price">' + (promo && !out && netPrice(t) < t.price ? '<s class="muted">' + eur(t.price) + '</s> ' + eur(netPrice(t)) : eur(t.price)) + '</span>' + (out || closed() ? (out ? '<span class="chip chip-bad">Agotada</span>' : '') : stepper("tq", t.id, v, Math.min(10, left))) + '</div></div>';
     }).join("");
   }
 
   function renderBuybar() {
     const box = $("#buybar"); if (!box) return;
-    const n = count(), fee = n * FEE_PER_TICKET, total = subtotal() + fee;
-    box.innerHTML = '<div><span class="small">' + (n ? n + ' entrada' + (n > 1 ? 's' : '') + ' + ' + eur(fee) + ' de gestión' : 'Elige tus entradas') + '</span><strong class="buy-total">' + eur(total) + '</strong></div>' +
+    const n = count(), fee = round2(n * FEE_PER_TICKET), dis = discount(), total = round2(subtotal() - dis + fee);
+    box.innerHTML = '<div><span class="small">' + (n ? n + ' entrada' + (n > 1 ? 's' : '') + (dis ? ' · ' + eur(-dis) + ' descuento' : '') + ' + ' + eur(fee) + ' de gestión' : 'Elige tus entradas') + '</span><strong class="buy-total">' + eur(total) + '</strong></div>' +
       '<button class="btn btn-primary" type="submit" ' + (n && !busy ? '' : 'disabled') + '>' + (busy ? 'Un momento…' : (PAGOS === 'prueba' ? 'Comprar (prueba)' : 'Pagar')) + '</button>';
   }
 
   function renderVip() {
     const box = $("#vip"); if (!box) return;
     const tables = (org && org.tables) || [];
-    if (!tables.length || e.vipEnabled === false || past()) { box.innerHTML = ""; return; }
+    if (!tables.length || e.vipEnabled === false || closed()) { box.innerHTML = ""; return; }
     const taken = new Set(e.taken || []);
     const free = tables.filter(t => !taken.has(t.id));
     const minT = Math.min.apply(null, tables.map(t => t.min || 0));
@@ -152,6 +164,7 @@
           '<div class="grid2"><div class="field"><label for="vEmail">Email</label><input id="vEmail" type="email" inputmode="email" autocomplete="email" required value="' + esc(vip.email) + '"></div>' +
           '<div class="field"><label for="vPhone">Teléfono (opcional)</label><input id="vPhone" type="tel" autocomplete="tel" value="' + esc(vip.phone) + '"></div></div>' +
           '<ul class="sum"><li><span>Señal ahora (' + DEPOSIT_PCT + ' %)</span><span class="mono">' + eur(dep) + '</span></li><li class="sum-fee"><span>El resto, en el local</span><span class="mono">' + eur((t.min || 0) - dep) + '</span></li></ul>' +
+          '<label class="terms"><input type="checkbox" id="vTerms"' + (vip.terms ? ' checked' : '') + '><span>' + TERMS + '</span></label>' +
           '<p class="err" id="vipErr" hidden></p>' +
           '<button class="btn btn-brass btn-block" type="submit">' + (PAGOS === 'prueba' ? 'Reservar (prueba, sin cobrar)' : 'Pagar señal de ' + eur(dep)) + '</button>'
         : '<p class="hint center">' + (takenNow ? 'Esa mesa se acaba de reservar. Elige otra.' : 'Toca una mesa dorada para elegirla.') + '</p>') +
@@ -164,6 +177,7 @@
     if (g("vEmail") != null) vip.email = g("vEmail");
     if (g("vPhone") != null) vip.phone = g("vPhone");
     if (g("vPeople") != null) vip.people = g("vPeople");
+    const tc = document.getElementById("vTerms"); if (tc) vip.terms = tc.checked;
   }
 
   async function buy() {
@@ -173,10 +187,11 @@
     if (!count()) return;
     if (!name) { err.textContent = "Escribe tu nombre."; err.hidden = false; $("#bName").focus(); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Escribe un email válido."; err.hidden = false; $("#bEmail").focus(); return; }
+    if (!$("#bTerms").checked) { err.textContent = "Para comprar tienes que aceptar las condiciones de compra."; err.hidden = false; return; }
     busy = true; renderBuybar();
     try {
       const items = {}; visibleTiers().forEach(t => { if (q[t.id]) items[t.id] = q[t.id]; });
-      const r = await crearPago({ kind: "tickets", eventId: e.id, items, name, email, rrppCode });
+      const r = await crearPago({ kind: "tickets", eventId: e.id, items, name, email, rrppCode, promoCode: promo ? promo.code : null });
       location.href = r.url;
     } catch (x) {
       busy = false; renderBuybar();
@@ -190,6 +205,7 @@
     if (!t) return;
     if (!vip.name.trim()) { err.textContent = "Escribe a nombre de quién va la reserva."; err.hidden = false; return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vip.email.trim())) { err.textContent = "Escribe un email válido."; err.hidden = false; return; }
+    if (!vip.terms) { err.textContent = "Para reservar tienes que aceptar las condiciones."; err.hidden = false; return; }
     setSheet(paying("Preparando el pago de la señal…"));
     try {
       const r = await crearPago({ kind: "table", eventId: e.id, tableId: t.id, name: vip.name.trim(), email: vip.email.trim(), phone: vip.phone.trim(), people: vip.people, rrppCode });
@@ -200,7 +216,23 @@
     }
   }
 
+  // Códigos de descuento: se comprueban al momento y se vuelven a comprobar al pagar
+  async function applyPromo(raw, fromLink) {
+    const code = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20), msg = $("#promoMsg"), input = $("#bCode");
+    if (input && fromLink) input.value = code;
+    const say = (t, ok) => { if (!msg) return; msg.hidden = false; msg.textContent = t; msg.className = ok ? "promo-ok" : "err"; };
+    if (!code) { promo = null; renderTiers(); renderBuybar(); if (msg) msg.hidden = true; return; }
+    try {
+      const s = await getDoc(doc(db, "events", e.id, "codes", code)), c = s.exists() ? s.data() : null;
+      if (!c || !c.active) { promo = null; say("Ese código no existe o ya no está activo."); }
+      else if (c.max && (c.used || 0) >= c.max) { promo = null; say("Ese código ya se ha usado todas las veces."); }
+      else { promo = { code, type: c.type, value: Number(c.value) || 0 }; say("✓ Código " + code + ": " + (c.type === "eur" ? eur(promo.value) + " menos por entrada" : promo.value + " % de descuento") + ".", true); }
+    } catch (x) { promo = null; say("No se pudo comprobar el código."); }
+    renderTiers(); renderBuybar();
+  }
+
   delegate(view, {
+    promo() { applyPromo(($("#bCode") || {}).value); },
     tq(d) {
       const t = e.tiers.find(x => x.id === d.id); if (!t) return;
       const max = Math.min(10, t.qty - (t.sold || 0));

@@ -11,6 +11,7 @@ const ADMIN = ["owner", "admin"];
 const ROUTES = [
   { id: "resumen", label: "Resumen", roles: ADMIN },
   { id: "eventos", label: "Eventos", roles: ADMIN },
+  { id: "entradas", label: "Entradas", roles: ADMIN },
   { id: "rrpp", label: "RRPP", roles: ADMIN },
   { id: "listas", label: "Listas", roles: ADMIN },
   { id: "mesas", label: "Mesas VIP", roles: ADMIN },

@@ -1,6 +1,6 @@
 // Listas de invitados por evento.
 import { db, collection, doc, query, where, onSnapshot, addDoc, deleteDoc, writeBatch, serverTimestamp } from "../../firebase.js";
-import { esc, fmtTime, delegate, openSheet, closeSheet, sheetBody, toast, norm } from "../../ui.js";
+import { esc, fmtTime, fmtDay, delegate, openSheet, closeSheet, sheetBody, toast, norm, downloadCsv } from "../../ui.js";
 import { watchOrgEvents, pickEvent, setPicked, evPicks, pastPicker, confirmTap, errHtml, noEventsHtml, keepInputs } from "../common.js";
 
 const TYPES = ["Gratis antes de 1:30", "Consumición incluida", "Invitación VIP", "Precio reducido"];
@@ -45,7 +45,7 @@ export default function (ctx, el) {
     const opts = '<option value="">' + (ctx.org.type === "local" ? "El local" : "La promotora") + '</option>' + team.map(r => '<option value="' + r.id + '">' + esc(r.name) + '</option>').join("");
     el.innerHTML = '<section class="page"><div class="ph"><div class="ph-t"><p class="eyebrow">' + esc(e.name) + '</p><h1 class="h1">Listas de invitados</h1></div>' + evPicks(events, e.id) + '</div>' +
       '<div class="pgrid">' +
-        '<div class="card"><div class="card-h"><h2 class="h2">Lista</h2><span class="small" id="gCount">' + guests.length + ' nombres · ' + guests.filter(g => g.inAt).length + ' dentro</span></div>' +
+        '<div class="card"><div class="card-h"><h2 class="h2">Lista</h2><span class="small" id="gCount">' + guests.length + ' nombres · ' + guests.filter(g => g.inAt).length + ' dentro</span><button class="linkbtn" data-act="csv">Descargar Excel</button></div>' +
         '<div class="field"><label for="gSearch" class="sr">Buscar</label><input id="gSearch" type="search" placeholder="Buscar un nombre" value="' + esc(filter) + '" autocomplete="off"></div><div id="gList">' + listHtml() + '</div></div>' +
         '<form class="card" id="gForm" novalidate><div class="card-h"><h2 class="h2">Añadir</h2><button type="button" class="linkbtn" data-act="bulk">' + (bulk ? 'Añadir de uno en uno' : 'Pegar varios nombres') + '</button></div>' +
           (bulk ? '<div class="field"><label for="gBulk">Un nombre por línea</label><textarea id="gBulk" rows="7" placeholder="Carmen López\nJavi Ruiz\n…"></textarea></div>'
@@ -79,6 +79,10 @@ export default function (ctx, el) {
   const onInput = ev => { if (ev.target.id === "gSearch") { filter = ev.target.value; renderList(); } };
   el.addEventListener("submit", onSubmit); el.addEventListener("input", onInput);
   const actions = {
+    csv() {
+      if (!guests.length) { toast("La lista está vacía."); return; }
+      downloadCsv("Lista " + e.name + " " + fmtDay(e.date), [["Nombre", "Tipo", "De parte de", "Hora de entrada"]].concat(guests.map(g => [g.name, g.type, who(g), g.inAt || ""])));
+    },
     pickEv(d) { setPicked(d.id); closeSheet(); e = events.find(x => x.id === d.id) || e; filter = ""; sub(); const s = el.querySelector("#gSearch"); if (s) s.value = ""; render(); },
     pastEv() { openSheet(pastPicker(events)); },
     bulk() { bulk = !bulk; paint(); },

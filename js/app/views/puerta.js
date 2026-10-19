@@ -15,6 +15,11 @@ function loadLib() {
 export default function (ctx, el) {
   let events = null, e = null, loadErr = null, tab = "escanear", guests = [], res = [], team = [], filter = "";
   let shownId = null, scanner = null, camOn = false, busy = false, last = { code: "", at: 0 }, log = [], wake = null, vTimer = null;
+  // Entradas del evento guardadas en el móvil: así la puerta sigue funcionando si se cae el wifi
+  let tickets = new Map(), ticketsReady = false;
+  const pendingUsed = new Set();
+  const isOnline = () => navigator.onLine !== false;
+  const est = d => d.data({ serverTimestamps: "estimate" });
   const offs = []; let evOffs = [];
   const verdict = $("#verdict");
 
@@ -22,14 +27,17 @@ export default function (ctx, el) {
   offs.push(onSnapshot(collection(db, "orgs", ctx.orgId, "rrpp"), s => { team = s.docs.map(d => Object.assign({ id: d.id }, d.data())); }, () => {}));
 
   function sub() {
-    evOffs.forEach(f => f()); evOffs = []; guests = []; res = []; log = [];
+    evOffs.forEach(f => f()); evOffs = []; guests = []; res = []; log = []; tickets = new Map(); ticketsReady = false;
     if (!e) return;
+    evOffs.push(onSnapshot(query(collection(db, "orgs", ctx.orgId, "tickets"), where("eventId", "==", e.id)), s => {
+      tickets = new Map(s.docs.map(d => [d.id, est(d)])); ticketsReady = true; offlineUi();
+    }, () => {}));
     evOffs.push(onSnapshot(query(collection(db, "orgs", ctx.orgId, "guests"), where("eventId", "==", e.id)), s => {
-      guests = s.docs.map(d => Object.assign({ id: d.id }, d.data())).sort((a, b) => a.name.localeCompare(b.name, "es"));
+      guests = s.docs.map(d => Object.assign({ id: d.id }, est(d))).sort((a, b) => a.name.localeCompare(b.name, "es"));
       if (tab === "lista") renderPart(); else updateCounter();
     }, () => {}));
     evOffs.push(onSnapshot(query(collection(db, "orgs", ctx.orgId, "reservations"), where("eventId", "==", e.id)), s => {
-      res = s.docs.map(d => Object.assign({ id: d.id }, d.data())).sort((a, b) => a.tableId.localeCompare(b.tableId, "es", { numeric: true }));
+      res = s.docs.map(d => Object.assign({ id: d.id }, est(d))).sort((a, b) => a.tableId.localeCompare(b.tableId, "es", { numeric: true }));
       if (tab === "mesas") renderPart();
     }, () => {}));
   }
@@ -54,9 +62,21 @@ export default function (ctx, el) {
     el.innerHTML = '<section class="page narrow"><div class="page-head"><p class="eyebrow">Puerta · ' + esc(e.venueName || "") + ' · ' + esc(fmtDay(e.date)) + '</p><h1 class="h1">' + esc(e.name) + '</h1></div>' + evPicks(events, e.id) +
       '<div class="counter" id="counter">' + counterHtml() + '</div>' +
       '<div class="picks" role="tablist"><button class="pick" data-act="tab" data-id="escanear" aria-pressed="' + (tab === "escanear") + '">Escanear</button><button class="pick" data-act="tab" data-id="lista" aria-pressed="' + (tab === "lista") + '">Lista de invitados</button><button class="pick" data-act="tab" data-id="mesas" aria-pressed="' + (tab === "mesas") + '">Mesas VIP</button></div>' +
+      '<div class="notice" id="offBar" hidden></div>' +
       '<div id="part"></div></section>';
-    renderPart();
+    renderPart(); offlineUi();
   }
+  function offlineUi() {
+    const bar = el.querySelector("#offBar"), n = tickets.size;
+    if (bar) {
+      bar.hidden = isOnline();
+      bar.innerHTML = '<b>Sin conexión.</b><p class="small">Puedes seguir escaneando: se comprueba con las ' + num(n) + ' entradas guardadas en este móvil y todo se sincroniza solo cuando vuelva el wifi.</p>';
+    }
+    const h = el.querySelector("#offReady");
+    if (h) h.textContent = ticketsReady ? "✓ " + num(n) + " entradas guardadas en este móvil por si se va el wifi." : "Guardando las entradas en este móvil…";
+  }
+  const onNet = () => { offlineUi(); if (isOnline()) toast("Conexión recuperada. Sincronizando…"); };
+  window.addEventListener("online", onNet); window.addEventListener("offline", onNet);
 
   function renderPart() {
     const box = el.querySelector("#part"); if (!box) return;
@@ -67,13 +87,14 @@ export default function (ctx, el) {
     if (tab === "escanear") {
       box.innerHTML = '<div class="page" style="gap:12px"><div class="reader-box"><div id="reader"></div><p id="camMsg"' + (camOn ? ' hidden' : '') + '>Toca “Abrir cámara” y apunta al QR de la entrada</p></div>' +
         '<div class="row"><button class="btn ' + (camOn ? '' : 'btn-primary') + '" data-act="cam">' + (camOn ? 'Parar cámara' : 'Abrir cámara') + '</button><span class="small">Funciona con la cámara de cualquier móvil.</span></div>' +
+        '<p class="hint" id="offReady"></p>' +
         '<form class="scan-in" id="manual" novalidate><label for="code" class="sr">Código de la entrada</label><input id="code" placeholder="O escribe el código: ' + esc(e.prefix || "ABC") + '-XXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="btn" type="submit">Validar</button></form>' +
         (ctx.org.demo ? '<div class="card demo-qr"><div class="qr" data-qr="' + esc(url("evento.html?id=" + encodeURIComponent(e.id))) + '" role="img" aria-label="QR para comprar una entrada de prueba"></div>' +
           '<div><p class="eyebrow eyebrow-brass">Demo</p><b>¿No tienes entrada?</b><p class="small">Escanea este QR con el móvil, compra una entrada de prueba (no se cobra nada) y luego enséñale el QR de la entrada a esta cámara. También puedes escribir su código arriba.</p></div></div>' : '') +
         '<div class="card" id="scanLog"><div class="card-h"><h2 class="h2">Últimos escaneos</h2><span class="small">en este móvil</span></div>' + (log.length ? '<ul class="slog">' + log.slice(0, 12).map(l =>
           '<li><span class="mono small">' + fmtTime(l.at) + '</span><div><b>' + esc(l.who || "—") + '</b><span class="mono small">' + esc(l.code) + '</span></div><span class="chip chip-' + (l.ok ? 'ok' : 'bad') + '">' + (l.ok ? '✓ ' : '✕ ') + esc(l.title) + '</span></li>').join("") + '</ul>'
           : '<p class="small muted">Aún no has escaneado nada.</p>') + '</div></div>';
-      drawQR(box, 120);
+      drawQR(box, 120); offlineUi();
     } else if (tab === "lista") {
       const f = norm(filter), list = guests.filter(g => !f || norm(g.name).includes(f));
       box.innerHTML = '<div class="page" style="gap:12px"><div class="field"><label for="pSearch">Busca por nombre (' + guests.length + ' en la lista, ' + guests.filter(g => g.inAt).length + ' dentro)</label><input id="pSearch" type="search" placeholder="Escribe un nombre" value="' + esc(filter) + '" autocomplete="off"></div>' +
@@ -136,26 +157,46 @@ export default function (ctx, el) {
     if (!code) return;
     if (!/^[A-Z0-9]{1,6}-[A-Z0-9]{4,8}$/.test(code)) { show({ ok: false, title: "No válida", msg: "Este QR no es una entrada de " + ctx.org.name + "." }, code); return; }
     busy = true;
+    if (!isOnline()) { try { validateLocal(code); } finally { busy = false; } return; }
     try {
-      const r = await runTransaction(db, async tx => {
+      const r = await withTimeout(runTransaction(db, async tx => {
         const tref = doc(db, "orgs", ctx.orgId, "tickets", code), ts = await tx.get(tref);
         if (!ts.exists()) return { state: "invalid" };
         const t = ts.data();
         if (t.eventId !== e.id) return { state: "other", t };
+        if (t.voided) return { state: "voided", t };
         if (t.usedAt) return { state: "used", t };
         tx.update(tref, { usedAt: serverTimestamp(), usedBy: ctx.uid });
         tx.update(doc(db, "events", e.id), { inside: increment(1) });
         return { state: "ok", t };
-      });
+      }), 7000);
       const t = r.t || {}, rp = t.rrppId ? team.find(x => x.id === t.rrppId) : null;
       if (r.state === "ok") show({ ok: true, title: "Adelante", who: t.buyerName, msg: (t.tierName || "Entrada") + (rp ? " · vía " + rp.name : "") }, code);
+      else if (r.state === "voided") show({ ok: false, title: "Anulada", who: t.buyerName, msg: "Esta entrada se anuló desde el panel. No puede entrar con ella." }, code);
       else if (r.state === "used") show({ ok: false, title: "Ya está dentro", who: t.buyerName, msg: "Esta entrada se escaneó a las " + fmtTime(t.usedAt) + ". Puede ser una captura copiada." }, code);
       else if (r.state === "other") { const o = events.find(x => x.id === t.eventId); show({ ok: false, title: "Otro evento", who: t.buyerName, msg: "Esta entrada es para " + (o ? o.name + ", " + fmtDay(o.date) : "otro evento") + "." }, code); }
       else show({ ok: false, title: "No válida", msg: "Este código no existe. Puede ser una entrada falsa o estar mal escrita." }, code);
     } catch (x) {
-      console.error(x);
-      show({ ok: false, title: "Sin conexión", msg: "No se ha podido comprobar. Revisa la conexión del móvil y vuelve a escanear." }, code);
+      console.warn("Puerta: sin respuesta del servidor, uso la lista guardada", x);
+      if (ticketsReady) validateLocal(code);
+      else show({ ok: false, title: "Sin conexión", msg: "Aún no se habían guardado las entradas en este móvil. Busca conexión y vuelve a escanear." }, code);
     } finally { busy = false; }
+  }
+  function withTimeout(p, ms) {
+    return Promise.race([p, new Promise((_, ko) => setTimeout(() => ko(Object.assign(new Error("timeout"), { code: "deadline-exceeded" })), ms))]);
+  }
+  // Sin conexión: se comprueba con las entradas guardadas y se apunta para sincronizar después
+  function validateLocal(code) {
+    const t = tickets.get(code), rp = t && t.rrppId ? team.find(x => x.id === t.rrppId) : null;
+    if (!t) { show({ ok: false, title: "No está en la lista", msg: "Sin conexión: este código no está entre las entradas guardadas de este evento. Puede ser falsa, de otro evento o comprada hace un momento." }, code); return; }
+    if (t.voided) { show({ ok: false, title: "Anulada", who: t.buyerName, msg: "Esta entrada se anuló desde el panel." }, code); return; }
+    if (t.usedAt || pendingUsed.has(code)) { show({ ok: false, title: "Ya está dentro", who: t.buyerName, msg: t.usedAt ? "Esta entrada se escaneó a las " + fmtTime(t.usedAt) + "." : "Esta entrada ya se ha escaneado en este móvil." }, code); return; }
+    pendingUsed.add(code);
+    const b = writeBatch(db);
+    b.update(doc(db, "orgs", ctx.orgId, "tickets", code), { usedAt: serverTimestamp(), usedBy: ctx.uid });
+    b.update(doc(db, "events", e.id), { inside: increment(1) });
+    b.commit().catch(err => { console.warn(err); toast("Al sincronizar: la entrada " + code + " ya constaba como usada en otra puerta."); });
+    show({ ok: true, title: "Adelante", who: t.buyerName, msg: (t.tierName || "Entrada") + (rp ? " · vía " + rp.name : "") + " · sin conexión, se sincroniza al volver" }, code);
   }
   function show(v, code) {
     log.unshift({ at: new Date(), code, who: v.who || "", ok: v.ok, title: v.title });
@@ -195,13 +236,22 @@ export default function (ctx, el) {
         const batch = writeBatch(db);
         batch.update(doc(db, "orgs", ctx.orgId, "guests", g.id), { inAt: serverTimestamp(), inBy: ctx.uid });
         batch.update(doc(db, "events", e.id), { inside: increment(1) });
-        await batch.commit();
+        const p = batch.commit();
+        if (!isOnline()) {
+          p.catch(err => { console.warn(err); toast("No se pudo sincronizar la entrada de " + g.name + "."); });
+          g.inAt = new Date(); renderPart(); beep(true); toast(g.name + " está dentro (se sincroniza al volver)."); return;
+        }
+        await p;
         beep(true); toast(g.name + " está dentro.");
       } catch (x) { b.disabled = false; toast("No se pudo marcar. Revisa la conexión."); }
     },
     async arrive(d, b) {
       b.disabled = true;
-      try { await updateDoc(doc(db, "orgs", ctx.orgId, "reservations", d.id), { arrivedAt: serverTimestamp() }); toast("Mesa marcada como llegada."); }
+      try {
+        const p = updateDoc(doc(db, "orgs", ctx.orgId, "reservations", d.id), { arrivedAt: serverTimestamp() });
+        if (!isOnline()) { p.catch(() => {}); const r = res.find(x => x.id === d.id); if (r) r.arrivedAt = new Date(); renderPart(); toast("Mesa marcada (se sincroniza al volver)."); return; }
+        await p; toast("Mesa marcada como llegada.");
+      }
       catch (x) { b.disabled = false; toast("No se pudo marcar."); }
     }
   };
@@ -209,6 +259,7 @@ export default function (ctx, el) {
 
   return () => {
     stopCam(); clearTimeout(vTimer); verdict.hidden = true; verdict.removeEventListener("click", onVerdict);
+    window.removeEventListener("online", onNet); window.removeEventListener("offline", onNet);
     offs.forEach(f => f()); evOffs.forEach(f => f()); offV(); offS();
     el.removeEventListener("submit", onSubmit); el.removeEventListener("input", onInput);
   };

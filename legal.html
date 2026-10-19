@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Legal y privacidad · Aforo</title>
+<meta name="theme-color" content="#0D0E13">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" href="css/aforo.css">
+<style>
+  .legal{max-width:760px;margin-inline:auto;display:flex;flex-direction:column;gap:28px}
+  .legal section{display:flex;flex-direction:column;gap:10px;scroll-margin-top:90px}
+  .legal h2{font-size:1.5rem}
+  .legal h3{font-size:1rem;margin:8px 0 0;font-weight:700}
+  .legal p,.legal li{color:var(--fg-2);font-size:15px;max-width:68ch}
+  .legal ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+  .legal b{color:var(--fg)}
+  .todo{background:var(--warn-soft);color:var(--warn);padding:0 6px;border-radius:5px;font-weight:600;white-space:nowrap}
+  .toc{display:flex;flex-wrap:wrap;gap:6px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./"><svg viewBox="0 0 34 22" aria-hidden="true"><rect x="2.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><rect x="29.2" y="4" width="2.6" height="15" rx="1.3" fill="var(--brass)"/><circle cx="3.5" cy="3.6" r="2.6" fill="var(--brass)"/><circle cx="30.5" cy="3.6" r="2.6" fill="var(--brass)"/><rect x="0" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><rect x="27" y="18.6" width="7" height="2.6" rx="1.2" fill="var(--brass)"/><path d="M4.8 6.4 Q17 19 29.2 6.4" fill="none" stroke="var(--rope)" stroke-width="2.6" stroke-linecap="round"/></svg><span>aforo</span></a>
+    <nav class="top-nav" aria-label="Principal">
+      <a href="eventos.html">Eventos</a>
+      <a href="pedido.html">Mis entradas</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap main">
+  <article class="legal">
+    <header class="page-head">
+      <p class="eyebrow">Información legal</p>
+      <h1 class="h1">Legal y privacidad</h1>
+      <div class="toc"><a class="pick" href="#aviso">Aviso legal</a><a class="pick" href="#condiciones">Condiciones de compra</a><a class="pick" href="#privacidad">Privacidad</a><a class="pick" href="#cookies">Cookies</a></div>
+      <div class="notice" id="pending" hidden><b>Faltan datos del titular.</b><p class="small">Los huecos marcados se rellenan en <span class="mono">js/config.js</span> (apartado LEGAL).</p></div>
+    </header>
+
+    <section id="aviso">
+      <h2 class="h2">Aviso legal</h2>
+      <p>En cumplimiento de la Ley 34/2002, de servicios de la sociedad de la información y de comercio electrónico (LSSI-CE), se informa de los datos del titular de esta web:</p>
+      <ul>
+        <li><b>Titular:</b> <span data-f="titular"></span></li>
+        <li><b>NIF:</b> <span data-f="nif"></span></li>
+        <li><b>Domicilio:</b> <span data-f="domicilio"></span></li>
+        <li><b>Email de contacto:</b> <span data-f="email"></span></li>
+        <li><b>Web:</b> <span data-f="web"></span></li>
+      </ul>
+      <p><b>Qué es Aforo.</b> Aforo es una plataforma que permite a locales de ocio y promotoras (los <b>organizadores</b>) vender entradas, reservar mesas y cobrar consumiciones. Aforo actúa como intermediario técnico: el organizador de cada evento es quien lo celebra y responde de él. Su nombre aparece en la ficha de cada evento y en tus entradas.</p>
+      <p>Los contenidos de cada evento (cartel, descripción, line-up, precios) los publica su organizador, que es responsable de ellos.</p>
+    </section>
+
+    <section id="condiciones">
+      <h2 class="h2">Condiciones de compra</h2>
+      <h3>1. Quién te vende la entrada</h3>
+      <p>Al comprar, celebras el contrato con el <b>organizador del evento</b>. Aforo gestiona el proceso de compra y la entrega de la entrada en su nombre.</p>
+      <h3>2. Precio y gastos de gestión</h3>
+      <p>El precio de cada entrada se muestra antes de pagar. A ese precio se suman unos <b>gastos de gestión por entrada</b> que también se indican antes de pagar. Los pagos se procesan con un proveedor de pago seguro (Stripe); Aforo no guarda los datos de tu tarjeta.</p>
+      <h3>3. Tu entrada</h3>
+      <ul>
+        <li>Tras el pago recibes tu entrada con un <b>código QR</b> en la página de tu pedido. Guarda el enlace o haz una captura.</li>
+        <li>Cada QR <b>solo sirve una vez</b>: entra la primera persona que lo enseñe. No compartas tu entrada.</li>
+        <li>El organizador puede pedirte un documento de identidad para comprobar tu edad o que la entrada es tuya.</li>
+        <li>No está permitido revender las entradas a un precio superior al pagado.</li>
+      </ul>
+      <h3>4. Derecho de admisión</h3>
+      <p>El local se reserva el derecho de admisión conforme a la normativa aplicable y a las condiciones publicadas en la ficha del evento (edad mínima, vestimenta, aforo, horario de entrada). Si no se te permite el acceso por incumplirlas, no corresponde devolución.</p>
+      <h3>5. Desistimiento y devoluciones</h3>
+      <p>Al tratarse de servicios de ocio con <b>fecha concreta</b>, no se aplica el derecho de desistimiento de 14 días (artículo 103.l del Real Decreto Legislativo 1/2007, Ley General para la Defensa de los Consumidores y Usuarios). Por tanto, una vez comprada, la entrada no se devuelve salvo que el organizador lo ofrezca o en los casos siguientes.</p>
+      <h3>6. Cancelación o cambio del evento</h3>
+      <p>Si el evento se cancela, el organizador te devolverá el precio de la entrada. Si cambia de fecha, podrás usar la entrada en la nueva fecha o pedir la devolución. Lo verás indicado en la ficha del evento y en tu entrada.</p>
+      <h3>7. Mesas VIP</h3>
+      <p>La reserva de mesa se confirma pagando una <b>señal</b>, que se descuenta del consumo mínimo indicado. El resto del consumo mínimo se paga en el local. Si no te presentas, la señal no se devuelve.</p>
+      <h3>8. Contacto y reclamaciones</h3>
+      <p>Para cualquier duda o reclamación sobre tu compra escribe a <span data-f="email"></span>. Tienes a tu disposición hojas de reclamaciones en el local y puedes acudir a los servicios de consumo de tu comunidad autónoma.</p>
+    </section>
+
+    <section id="privacidad">
+      <h2 class="h2">Política de privacidad</h2>
+      <h3>Responsable</h3>
+      <p><span data-f="titular"></span> (NIF <span data-f="nif"></span>), contacto: <span data-f="email"></span>. El organizador de cada evento también trata tus datos para celebrarlo (control de acceso y reservas).</p>
+      <h3>Qué datos tratamos y para qué</h3>
+      <ul>
+        <li><b>Compradores:</b> nombre, email y, en reservas de mesa, teléfono. Para gestionar tu compra, entregarte la entrada, controlar el acceso al evento y atender tus consultas.</li>
+        <li><b>Equipo de los locales</b> (dueños, encargados, porteros, camareros y RRPP): nombre y email, para darles acceso a la plataforma.</li>
+        <li><b>Listas de invitados:</b> el nombre que apunta el organizador o su RRPP, para dejarte pasar.</li>
+      </ul>
+      <h3>Base legal</h3>
+      <p>La ejecución del contrato de compra (art. 6.1.b del RGPD) y, para el equipo de los locales, la relación con el organizador.</p>
+      <h3>Con quién se comparten</h3>
+      <ul>
+        <li>Con el <b>organizador del evento</b> que has comprado.</li>
+        <li>Con los proveedores que hacen funcionar la plataforma, con las debidas garantías: Google Firebase (base de datos y acceso), Stripe (pagos) y el alojamiento de la web.</li>
+      </ul>
+      <p>No vendemos tus datos ni los usamos para publicidad.</p>
+      <h3>Cuánto tiempo</h3>
+      <p>Mientras sean necesarios para la finalidad y, después, durante los plazos legales (por ejemplo, obligaciones fiscales).</p>
+      <h3>Tus derechos</h3>
+      <p>Puedes pedir el acceso, la rectificación, la supresión, la oposición, la limitación o la portabilidad de tus datos escribiendo a <span data-f="email"></span>. Si crees que no se han respetado, puedes reclamar ante la Agencia Española de Protección de Datos (aepd.es).</p>
+    </section>
+
+    <section id="cookies">
+      <h2 class="h2">Cookies</h2>
+      <p>Aforo <b>no usa cookies de publicidad ni de analítica</b>. Solo guarda en tu navegador lo imprescindible para que la web funcione:</p>
+      <ul>
+        <li>Tu sesión, si eres del equipo de un local.</li>
+        <li>La lista de tus pedidos, para que veas tus entradas en «Mis entradas».</li>
+        <li>El RRPP que te ha pasado el enlace (durante 7 días), para que tu compra cuente para él.</li>
+        <li>Una copia de la web para que la puerta funcione sin conexión.</li>
+      </ul>
+      <p>Al ser almacenamiento técnico necesario, no requiere tu consentimiento (art. 22.2 LSSI-CE). Las fuentes tipográficas se cargan desde Google Fonts.</p>
+    </section>
+
+    <p class="hint">Última actualización: <span id="upd"></span>.</p>
+  </article>
+</main>
+
+<footer class="wrap foot"><div class="foot-in"><span>Aforo</span><span><a href="eventos.html">Eventos</a> · <a href="pedido.html">Mis entradas</a></span></div></footer>
+
+<script type="module">
+  import { LEGAL } from "./js/config.js";
+  import { esc } from "./js/ui.js";
+  const L = Object.assign({}, LEGAL || {});
+  if (!L.web) L.web = location.origin + location.pathname.replace(/legal\.html$/, "");
+  const NAMES = { titular: "nombre del titular", nif: "NIF", domicilio: "domicilio", email: "email de contacto", web: "web" };
+  let missing = false;
+  document.querySelectorAll("[data-f]").forEach(el => {
+    const k = el.dataset.f, v = String(L[k] || "").trim();
+    if (v) el.textContent = v;
+    else { missing = true; el.innerHTML = '<span class="todo">[' + esc(NAMES[k] || k) + ']</span>'; }
+  });
+  document.getElementById("pending").hidden = !missing;
+  document.getElementById("upd").textContent = "octubre de 2026";
+</script>
+</body>
+</html>
