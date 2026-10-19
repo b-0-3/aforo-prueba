@@ -113,16 +113,16 @@
   import { FEE_PER_TICKET } from "./js/config.js";
   import { eur, esc, fmtDay, flyer, fromPrice, evStatus, toDate } from "./js/ui.js";
   import { configured, db, collection, query, where, getDocs } from "./js/firebase.js";
-  import { ensureDemo, probarComo, DEMO_ORG } from "./js/demo.js";
+  import { ensureDemo, probarComo, DEMO_ORG, demoError } from "./js/demo.js";
   document.getElementById("fee").textContent = eur(FEE_PER_TICKET);
 
   const box = document.getElementById("demoEvents"), err = document.getElementById("demoErr");
   async function demoEvents() {
     if (!configured) { box.innerHTML = '<p class="small">Falta conectar Firebase.</p>'; return; }
-    await ensureDemo();
+    const ok = await ensureDemo();
     try {
       let list = [];
-      for (let i = 0; i < 6 && !list.length; i++) {
+      for (let i = 0; i < (ok ? 6 : 1) && !list.length; i++) {
         if (i) await new Promise(r => setTimeout(r, 1500));
         const s = await getDocs(query(collection(db, "events"), where("orgId", "==", DEMO_ORG), where("published", "==", true)));
         list = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => toDate(e.date).getTime() >= Date.now() - 8 * 3600e3).sort((a, b) => toDate(a.date) - toDate(b.date));
@@ -132,8 +132,8 @@
         return '<a class="evc" href="evento.html?id=' + encodeURIComponent(e.id) + '">' + flyer(e, "card") +
           '<div class="evc-meta"><div class="evc-row"><span class="eyebrow">' + esc(fmtDay(e.date)) + ' · ' + esc(e.venueName || "") + '</span>' + (st[1] ? '<span class="chip chip-' + st[1] + '">' + st[0] + '</span>' : '') + '</div>' +
           '<p class="small">' + esc(e.genre || "") + (fp != null ? ' · desde <b>' + eur(fp) + '</b>' : '') + '</p></div></a>';
-      }).join("") : '<p class="small">Ahora mismo no hay eventos de ejemplo. Recarga en un momento.</p>';
-    } catch (e) { console.error(e); box.innerHTML = '<p class="small">No se han podido cargar los eventos de ejemplo. Recarga la página.</p>'; }
+      }).join("") : '<div class="notice"><b>No se ha podido preparar la demo.</b><p class="small">' + esc(demoError() || "Recarga la página en un momento.") + '</p></div>';
+    } catch (e) { console.error(e); box.innerHTML = '<div class="notice"><b>No se han podido cargar los eventos de ejemplo.</b><p class="small">' + esc(demoError() || ("Error de Firebase: " + (e.code || e.message))) + '</p></div>'; }
   }
   demoEvents();
   document.getElementById("demoRoles").addEventListener("click", async ev => {

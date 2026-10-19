@@ -214,7 +214,19 @@ async function refresh(a, db) {
 }
 
 /* ---------- lo que usan las páginas ---------- */
-let running = null;
+let running = null, lastErr = null;
+// Explica en cristiano por qué no se ha podido montar la demo
+export function demoError() {
+  if (!lastErr) return null;
+  const c = String(lastErr.code || ""), m = String(lastErr.message || "");
+  if (/operation-not-allowed/.test(c)) return "Falta activar el acceso con email en Firebase: Authentication → Método de acceso → Correo electrónico/contraseña.";
+  if (/admin-restricted-operation/.test(c)) return "Firebase no deja crear cuentas: Authentication → Configuración → Acciones del usuario → activa «Habilitar la creación».";
+  if (/permission-denied|insufficient permissions/i.test(c + m)) return "Firebase no deja guardar los datos de ejemplo. Revisa que las reglas publicadas son las de aforo-prueba (las que dicen «VERSIÓN DE PRUEBA»).";
+  if (/email-already-in-use|invalid-credential|wrong-password/.test(c)) return "Las cuentas de la demo existen con otra contraseña. Hay que subir VERSION en js/demo.js.";
+  if (/network|unavailable|offline/i.test(c + m)) return "No hay conexión con Firebase. Revisa tu internet y recarga.";
+  if (/api-key|invalid-api-key/.test(c)) return "La configuración de Firebase (js/config.js) no es válida.";
+  return "Error de Firebase: " + (c || m);
+}
 export function ensureDemo() {
   if (!configured) return Promise.resolve(false);
   if (!running) running = (async () => {
@@ -222,14 +234,16 @@ export function ensureDemo() {
     const org = await readOrg(db);
     if (ready(org)) { await refresh(a, db); return true; }
     if (inProgress(org)) return waitReady(db, 25e3);
-    try { return await seedAll(a, db); }
+    try { lastErr = null; return await seedAll(a, db); }
     catch (e) {
-      // Si choca con otro navegador que la está montando, esperamos a que termine
-      console.warn("Demo: esperando a que termine de montarse", e);
+      lastErr = e;
+      console.warn("Demo: no se pudo montar", e);
       try { await signOut(a); } catch (x) { /* nada */ }
-      return waitReady(db, 25e3);
+      // Solo esperamos si parece que otro navegador la está montando ahora mismo
+      if (inProgress(await readOrg(db).catch(() => null))) return waitReady(db, 25e3);
+      return false;
     }
-  })().catch(e => { console.warn("No se pudo preparar la demo", e); running = null; try { signOut(secondary().auth); } catch (x) { /* nada */ } return false; });
+  })().catch(e => { lastErr = e; console.warn("No se pudo preparar la demo", e); running = null; try { signOut(secondary().auth); } catch (x) { /* nada */ } return false; });
   return running;
 }
 
