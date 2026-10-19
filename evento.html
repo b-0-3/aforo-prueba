@@ -37,6 +37,7 @@
   import { crearPago } from "./js/pagos.js";
   import { $, esc, eur, ucf, fmtLong, fmtTime, flyer, stepper, mapHtml, legend, delegate, openSheet, setSheet, closeSheet, sheetBody, toast, paying, shareOrCopy, toDate, url } from "./js/ui.js";
   import { params, rememberRrpp, rrppFor } from "./js/public.js";
+  import { ensureDemo } from "./js/demo.js";
 
   const view = $("#view");
   const id = params.get("id");
@@ -50,7 +51,8 @@
     view.innerHTML = '<a class="back" href="eventos.html">← Todos los eventos</a><div class="card empty"><p><b>Este evento no existe o ya no está a la venta.</b></p><a class="btn" href="eventos.html">Ver otros eventos</a></div>';
   }
 
-  function start() {
+  async function start() {
+    if (String(id).startsWith("demo-")) await ensureDemo(); // por si es la primera visita
     let first = true;
     onSnapshot(doc(db, "events", id), async snap => {
       if (!snap.exists()) { notFound(); return; }
@@ -62,6 +64,8 @@
         try { const o = await getDoc(doc(db, "orgs", e.orgId)); org = o.exists() ? o.data() : {}; } catch (err) { org = {}; }
         document.title = e.name + " · Aforo";
         renderAll();
+        // evento.html?id=…#mesa abre directamente la reserva de mesa VIP
+        if (location.hash === "#mesa" && !past() && e.vipEnabled !== false && ((org && org.tables) || []).length) openSheet(vipHtml());
       } else {
         // Llega una venta o reserva nueva: refrescamos disponibilidad sin perder lo escrito
         Object.keys(q).forEach(k => { const t = e.tiers.find(x => x.id === k); if (!t) delete q[k]; else q[k] = Math.min(q[k], Math.max(0, t.qty - (t.sold || 0))); });

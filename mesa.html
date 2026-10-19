@@ -31,6 +31,7 @@
   import { configured, db, doc, getDoc, notConfiguredHtml } from "./js/firebase.js";
   import { crearPago } from "./js/pagos.js";
   import { PAGOS } from "./js/config.js";
+  import { ensureDemo, DEMO_ORG } from "./js/demo.js";
   import { $, esc, eur, stepper, delegate, PRODUCT_CATS } from "./js/ui.js";
   import { params } from "./js/public.js";
 
@@ -43,6 +44,7 @@
   else load();
 
   async function load() {
+    if (orgId === DEMO_ORG) await ensureDemo(); // por si es la primera visita
     try {
       const s = await getDoc(doc(db, "orgs", orgId));
       if (!s.exists()) { view.innerHTML = '<div class="notice"><b>Este local no existe.</b></div>'; return; }

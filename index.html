@@ -48,11 +48,20 @@
       <div class="page-head">
         <p class="eyebrow eyebrow-brass">Demo en directo · sin registrarte · no se cobra nada</p>
         <h2 class="h1">Pruébalo ya</h2>
-        <p class="lead"><b>1.</b> Compra una entrada de prueba para uno de estos eventos. <b>2.</b> Entra al panel como portero y escanéala, o como dueño y mira cómo entra la venta.</p>
+        <p class="lead"><b>1.</b> Haz de cliente: compra una entrada, reserva una mesa o pide una copa. <b>2.</b> Cámbiate al otro lado: entra como portero y escanea tu entrada, o como dueño y mira cómo entra la venta.</p>
       </div>
-      <div class="ev-grid" id="demoEvents"><div class="loading"><span class="spin spin-sm"></span>Preparando los eventos de ejemplo…</div></div>
       <div class="field">
-        <span class="lbl">Entrar al panel de la demo como</span>
+        <span class="lbl">Como cliente</span>
+        <div class="row">
+          <a class="btn btn-primary" href="evento.html?id=demo-e1">Comprar una entrada</a>
+          <a class="btn" href="evento.html?id=demo-e1#mesa">Reservar mesa VIP</a>
+          <a class="btn" href="mesa.html?o=demo&amp;t=V3">Pedir desde la mesa</a>
+          <a class="btn" href="pedido.html">Mis entradas</a>
+        </div>
+        <p class="hint">"Pedir desde la mesa" es lo que ve quien escanea el QR pegado en su mesa: pide, paga con el móvil y le llega a la barra.</p>
+      </div>
+      <div class="field">
+        <span class="lbl">Como el local (entra al panel)</span>
         <div class="row" id="demoRoles">
           <button class="btn btn-primary" data-role="owner">Dueño del local</button>
           <button class="btn" data-role="puerta">Portero</button>
@@ -61,6 +70,10 @@
         </div>
         <p class="hint">Truco: abre la puerta en el ordenador, compra con el móvil y escanea el QR del móvil con la cámara del ordenador. La demo es compartida: lo que hagas lo verán otros que la prueben.</p>
         <p class="err" id="demoErr" hidden></p>
+      </div>
+      <div class="field">
+        <span class="lbl">Eventos de ejemplo</span>
+        <div class="ev-grid" id="demoEvents"><div class="loading"><span class="spin spin-sm"></span>Preparando los eventos de ejemplo…</div></div>
       </div>
     </section>
 
