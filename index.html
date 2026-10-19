@@ -44,7 +44,7 @@
       </div>
     </section>
 
-    <section class="card demo-box" id="demo">
+    <section class="card demo-box" id="demo" hidden>
       <div class="page-head">
         <p class="eyebrow eyebrow-brass">Demo en directo · sin registrarte · no se cobra nada</p>
         <h2 class="h1">Pruébalo ya</h2>
@@ -113,7 +113,7 @@
   import { FEE_PER_TICKET } from "./js/config.js";
   import { eur, esc, fmtDay, flyer, fromPrice, evStatus, toDate } from "./js/ui.js";
   import { configured, db, collection, query, where, getDocs } from "./js/firebase.js";
-  import { ensureDemo, probarComo, DEMO_ORG, demoError } from "./js/demo.js";
+  import { ensureDemo, probarComo, DEMO_ORG, demoError, DEMO_ON } from "./js/demo.js";
   document.getElementById("fee").textContent = eur(FEE_PER_TICKET);
 
   const box = document.getElementById("demoEvents"), err = document.getElementById("demoErr");
@@ -135,7 +135,9 @@
       }).join("") : '<div class="notice"><b>No se ha podido preparar la demo.</b><p class="small">' + esc(demoError() || "Recarga la página en un momento.") + '</p></div>';
     } catch (e) { console.error(e); box.innerHTML = '<div class="notice"><b>No se han podido cargar los eventos de ejemplo.</b><p class="small">' + esc(demoError() || ("Error de Firebase: " + (e.code || e.message))) + '</p></div>'; }
   }
-  demoEvents();
+  // Con cobros reales no hay demo: la portada enseña "Crear cuenta" en su lugar
+  if (DEMO_ON) { document.getElementById("demo").hidden = false; demoEvents(); }
+  else document.querySelectorAll('a[href="#demo"]').forEach(a => { a.href = "eventos.html"; a.textContent = "Ver eventos"; });
   document.getElementById("demoRoles").addEventListener("click", async ev => {
     const b = ev.target.closest("[data-role]"); if (!b) return;
     document.querySelectorAll("#demoRoles button").forEach(x => { x.disabled = true; });

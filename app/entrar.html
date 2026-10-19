@@ -28,7 +28,7 @@
   import { configured, auth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile, notConfiguredHtml } from "../js/firebase.js";
   import { $, esc, delegate } from "../js/ui.js";
   import { createOrg, authError } from "../js/app/account.js";
-  import { probarComo } from "../js/demo.js";
+  import { probarComo, DEMO_ON } from "../js/demo.js";
 
   const view = $("#view");
   let mode = location.hash === "#registro" ? "registro" : "entrar", type = "local", working = false;
@@ -65,7 +65,7 @@
         '<p class="err" id="err" hidden></p><button class="btn btn-primary btn-block" type="submit">Enviar email</button>' +
         '<button class="linkbtn" type="button" data-act="mode" data-id="entrar">Volver a entrar</button></form>';
     }
-    const demo = mode === "olvido" ? "" : '<div class="card" style="gap:10px"><p class="eyebrow eyebrow-brass">¿Solo quieres probarlo?</p><p class="small">Entra en la demo sin registrarte. Como cliente: <a href="../index.html#demo">compra una entrada o pide desde la mesa</a>. Como el local:</p>' +
+    const demo = (mode === "olvido" || !DEMO_ON) ? "" : '<div class="card" style="gap:10px"><p class="eyebrow eyebrow-brass">¿Solo quieres probarlo?</p><p class="small">Entra en la demo sin registrarte. Como cliente: <a href="../index.html#demo">compra una entrada o pide desde la mesa</a>. Como el local:</p>' +
       '<div class="row" id="demoRoles"><button class="btn btn-sm btn-primary" data-role="owner">Dueño</button><button class="btn btn-sm" data-role="puerta">Portero</button><button class="btn btn-sm" data-role="barra">Camarero</button><button class="btn btn-sm" data-role="rrpp">RRPP</button></div>' +
       '<p class="err" id="demoErr" hidden></p></div>';
     view.innerHTML = (mode === "olvido" ? "" : tabs) + body + demo;

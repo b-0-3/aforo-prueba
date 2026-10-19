@@ -12,6 +12,10 @@ import {
   doc, getDoc, getDocs, updateDoc, collection, query, where, writeBatch, serverTimestamp, Timestamp
 } from "./firebase.js";
 import { DEFAULT_LAYOUTS, DEFAULT_PRODUCTS, dayKey, toDate, rid, url } from "./ui.js";
+import { PAGOS } from "./config.js";
+
+// La demo solo existe en la versión de prueba (con cobros reales no se monta)
+export const DEMO_ON = PAGOS === "prueba";
 
 export const DEMO_ORG = "demo";
 const VERSION = 2;
@@ -236,7 +240,7 @@ export function demoError() {
   return "Error de Firebase: " + (c || m);
 }
 export function ensureDemo() {
-  if (!configured) return Promise.resolve(false);
+  if (!configured || !DEMO_ON) return Promise.resolve(false);
   if (!running) running = (async () => {
     const s = secondary(), a = s.auth, db = s.db;
     const org = await readOrg(db);
